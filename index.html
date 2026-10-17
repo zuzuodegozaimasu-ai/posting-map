@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>配布マップ</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700;900&display=swap">
+<meta name="description" content="ポスティング（チラシ配り）の二重配りを防ぐ、チーム向けの配布記録マップ。配った家を地図で共有できます。">
 <script>
 /* ============================================================
    ★ ここだけ書き換えてください（Supabase の Project Settings → API）
@@ -152,6 +155,17 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 .leaflet-popup-content{font-family:var(--font);font-size:13px;line-height:1.6}
 .leaflet-popup-content button{margin-top:6px;margin-right:4px;border:1px solid #14322b;color:#14322b;background:#fff;border-radius:8px;padding:6px 12px;font-weight:700}
 .leaflet-control-attribution{font-size:10px}
+.plans{display:grid;gap:10px}
+.plan{border:2px solid var(--line);border-radius:16px;padding:14px;display:grid;gap:6px}
+.plan.current{border-color:var(--done)}
+.plan h4{margin:0;font-size:16px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.plan h4 span{font-size:20px;font-variant-numeric:tabular-nums}
+.plan h4 small{font-size:12px;color:var(--muted);font-weight:600}
+.plan ul{margin:0;padding-left:1.2em;font-size:13px;line-height:1.7;color:var(--muted)}
+.plan .tag{font-size:12px;font-weight:800;color:var(--done);margin-right:auto}
+.lock{border:1px dashed var(--line);border-radius:14px;padding:14px;text-align:center;font-size:14px;line-height:1.6}
+.lock .btn{margin-top:8px}
+.paidtag{font-size:10px;font-weight:800;background:rgba(255,255,255,.25);border-radius:6px;padding:1px 5px;margin-left:6px;vertical-align:2px}
 .drawbar{position:absolute;left:0;right:0;z-index:1200;display:flex;align-items:center;gap:10px;background:var(--warn);color:#1a1300;font-weight:800;font-size:14px;
   padding:10px max(12px,env(safe-area-inset-right,0px)) 10px max(12px,env(safe-area-inset-left,0px))}
 .drawbar span{flex:1;min-width:0}
@@ -159,6 +173,74 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 #map.drawing{cursor:crosshair}
 .alabel{background:rgba(255,255,255,.92);color:#122420;border:2px solid currentColor;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:800;white-space:nowrap;transform:translate(-50%,-50%);display:inline-block;box-shadow:0 1px 4px rgba(0,0,0,.25)}
 .alabel b{color:#122420}
+/* ===== トップページ =====
+   Layout: phone-first single column, left-aligned; on wide screens the hero splits into text | live map demo.
+   The one bold element is the animated map demo; everything else stays quiet. */
+.lp{--lp-ink:#0f2a24;--lp-paper:#eaf1ec;--lp-block:#d3e0d8;--lp-house:#ffffff;--lp-green:#1f8a5b;--lp-stamp:#c8372d;--lp-blue:#2b63c9;--lp-surface:#ffffff;--lp-muted:#4f625b;
+  --lp-display:"Dela Gothic One","Hiragino Sans",sans-serif;--lp-body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",sans-serif;
+  background:var(--lp-paper);color:var(--lp-ink);font-family:var(--lp-body);font-size:16px;line-height:1.75}
+@media (prefers-color-scheme:dark){.lp{--lp-ink:#e6efe9;--lp-paper:#0f1a17;--lp-block:#1f2d28;--lp-house:#2b3b35;--lp-surface:#16231f;--lp-muted:#a6b8b0;--lp-green:#34b37b;--lp-blue:#5b8de0}}
+.lp-head{display:flex;align-items:center;justify-content:space-between;max-width:1080px;margin:0 auto;padding-top:calc(env(safe-area-inset-top,0px) + 14px);padding-bottom:14px}
+.lp-logo{display:flex;align-items:center;gap:8px;font-weight:900;font-size:17px;letter-spacing:.02em}
+.lp-logo svg{width:26px;height:26px;color:var(--lp-green)}
+.lp-login{border:1.5px solid currentColor;background:transparent;color:var(--lp-ink);border-radius:999px;padding:7px 16px;font-weight:700;font-family:var(--lp-body)}
+.lp-hero{display:grid;gap:28px;padding-top:18px;padding-bottom:40px;max-width:1080px;margin:0 auto}
+.lp-h1{font-family:var(--lp-display);font-weight:400;font-size:clamp(36px,10vw,64px);line-height:1.22;margin:0;letter-spacing:.01em;text-wrap:balance}
+.lp-lead{font-size:17px;margin:18px 0 0;max-width:32em}
+.lp-cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+.lp-btn{border-radius:14px;padding:15px 22px;font-size:16px;font-weight:800;font-family:var(--lp-body);border:2px solid var(--lp-ink)}
+.lp-btn-main{background:var(--lp-ink);color:var(--lp-paper)}
+.lp-btn-sub{background:transparent;color:var(--lp-ink)}
+.lp-small{font-size:13px;color:var(--lp-muted);margin:12px 0 0}
+.lp-demo{margin:0}
+.lp-demo svg{width:100%;max-width:520px;height:auto;display:block;filter:drop-shadow(0 10px 24px rgba(15,42,36,.16))}
+.lp-demo figcaption{font-size:13px;color:var(--lp-muted);margin-top:10px;max-width:36em}
+.d-paper{fill:var(--lp-paper)}.d-road{stroke:var(--lp-house);stroke-width:14}
+.d-blocks rect{fill:var(--lp-block)}.d-houses rect{fill:var(--lp-house);stroke:var(--lp-block);stroke-width:1}
+.d-area{fill:rgba(31,138,91,.07);stroke:var(--lp-green);stroke-width:2.5;stroke-dasharray:9 7}
+.d-pin circle,.d-pin rect{stroke:#fff;stroke-width:3}
+.d-pin .g{fill:var(--lp-green)}.d-pin .b{fill:var(--lp-blue)}.d-pin .r{fill:var(--lp-stamp)}
+.d-pin text{fill:#fff;font:900 11px var(--lp-body);text-anchor:middle}
+.d-tap .ring{fill:none;stroke:#e0a400;stroke-width:3;stroke-dasharray:5 4}
+.d-warn rect{fill:#e0a400}.d-warn .w1{font:800 13px var(--lp-body);fill:#1a1300}.d-warn .w2{font:600 12px var(--lp-body);fill:#3a2c00}
+/* 1回だけの演出：印が順に付く → 同じ家をタップ → 注意が出る */
+@media (prefers-reduced-motion:no-preference){
+  .d-pin{opacity:0;animation:pinIn .35s ease-out forwards}
+  .p1{animation-delay:.3s}.p2{animation-delay:.7s}.p3{animation-delay:1.1s}.p4{animation-delay:1.5s}.p5{animation-delay:1.9s}.p6{animation-delay:2.3s}
+  .d-tap{opacity:0;animation:tapIn .5s ease-out 3s forwards}
+  .d-warn{opacity:0;animation:warnIn .4s ease-out 3.4s forwards}
+  @keyframes pinIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+  @keyframes tapIn{0%{opacity:0}40%{opacity:1}100%{opacity:1}}
+  @keyframes warnIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .d-pin,.d-warn{transform-box:fill-box}
+}
+.lp-sec{max-width:1080px;margin:0 auto;padding-top:44px;padding-bottom:12px}
+.lp-h2{font-family:var(--lp-display);font-weight:400;font-size:clamp(22px,5.6vw,30px);line-height:1.4;margin:0 0 20px;text-wrap:balance}
+.lp-p{margin:0 0 18px;max-width:36em}
+.lp-pairs{margin:0;display:grid;gap:12px}
+.lp-pairs div{background:var(--lp-surface);border-radius:18px;padding:18px 18px 16px}
+.lp-pairs dt{font-weight:800;font-size:16px;color:var(--lp-stamp);margin-bottom:6px}
+.lp-pairs dd{margin:0;font-size:15px}
+.lp-steps{margin:0;padding:0;list-style:none;counter-reset:s;display:grid;gap:16px}
+.lp-steps li{counter-increment:s;display:grid;grid-template-columns:44px 1fr;column-gap:14px;align-items:start}
+.lp-steps li::before{content:counter(s);grid-row:span 2;width:44px;height:44px;border-radius:50%;background:var(--lp-green);color:#fff;font:400 20px var(--lp-display);display:flex;align-items:center;justify-content:center}
+.lp-steps b{font-size:17px}.lp-steps span{color:var(--lp-muted);font-size:15px}
+.lp-price{display:grid;gap:12px}
+.lp-plan{background:var(--lp-surface);border-radius:18px;padding:18px;border:2px solid transparent}
+.lp-plan-hi{border-color:var(--lp-green)}
+.lp-plan h3{margin:0;font-size:16px}
+.lp-yen{font-family:var(--lp-display);font-size:28px;margin:4px 0 8px;font-variant-numeric:tabular-nums}
+.lp-yen small{font-family:var(--lp-body);font-size:13px;color:var(--lp-muted)}
+.lp-plan ul{margin:0;padding-left:1.2em;font-size:14px;color:var(--lp-muted)}
+.lp-end{max-width:1080px;margin:0 auto;padding-top:48px;padding-bottom:40px}
+.lp-end-h{font-family:var(--lp-display);font-size:clamp(24px,6.4vw,36px);line-height:1.35;margin:0;text-wrap:balance}
+.lp-foot{font-size:12px;color:var(--lp-muted);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px);max-width:1080px;margin:0 auto}
+@media (min-width:860px){
+  .lp-hero{grid-template-columns:1fr 1fr;align-items:center;padding-top:48px;padding-bottom:64px}
+  .lp-pairs,.lp-price{grid-template-columns:1fr 1fr}
+  .lp-price{grid-template-columns:repeat(3,1fr)}
+  .lp-steps{grid-template-columns:repeat(3,1fr)}
+}
 </style>
 </head>
 <body>
@@ -179,7 +261,7 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 </div>
 <nav class="bar">
   <div class="today" id="today">今日の配布<br><b>0</b> 枚</div>
-  <button id="chatBtn" class="chatbtn">チャット・連絡<span id="badge" class="badge" hidden>0</span></button>
+  <button id="chatBtn" class="chatbtn">チャット・連絡<span id="chatPaid" class="paidtag" hidden>有料</span><span id="badge" class="badge" hidden>0</span></button>
 </nav>
 
 <!-- ===== record sheet ===== -->
@@ -268,6 +350,8 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
     </section>
     <section id="tab-stats" hidden>
       <h2>集計</h2>
+      <div id="statsLock" class="lock" hidden>メンバー別の集計とCSV出力は、有料プランの機能です。<br><button class="btn primary" data-openplan="stats">プランを見る</button></div>
+      <div id="statsBody">
       <div class="stats">
         <div class="stat"><b id="sTodaySheets">0</b><span>今日の枚数（全体）</span></div>
         <div class="stat"><b id="sAllSheets">0</b><span>累計の枚数</span></div>
@@ -277,11 +361,13 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
       <h3>メンバー別</h3>
       <table><thead><tr><th>メンバー</th><th>今日</th><th>累計の枚数</th><th>件数</th></tr></thead><tbody id="statRows"></tbody></table>
       <div class="row"><button id="csvBtn" class="btn">CSVで保存</button></div>
+      </div>
     </section>
     <section id="tab-me" hidden>
       <h2>設定</h2>
       <div class="toggle"><span>自分の現在地をメンバーに表示する</span><input id="shareLocIn" type="checkbox" checked></div>
       <p class="note">オフにすると、地図上のあなたのアイコンが他のメンバーから見えなくなります。アプリを閉じている間は、オンでも位置は送られません。</p>
+      <div class="row"><button class="btn primary wide" data-openplan="me">プランと支払い</button></div>
       <p class="note">ログイン中：<b id="meName"></b>（<span id="meEmail"></span>）</p>
       <div class="row">
         <button id="leaveBtn" class="btn danger">このグループを抜ける</button>
@@ -292,30 +378,151 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
   </div>
 </div>
 
-<!-- ===== auth screen ===== -->
-<div id="authScreen" class="screen" hidden>
-  <div class="screen-inner pad-x">
-    <p class="logo">配布マップ</p>
-    <p class="lede">チームで配ったポストを地図で共有して、二重配りを防ぎます。</p>
-    <div id="joinNotice" class="card" hidden>招待を受け取りました。ログインまたはアカウント作成をすると、グループ「<b id="joinCodeTxt"></b>」に参加します。</div>
-    <div class="card">
-      <div class="tabs" role="tablist">
-        <button role="tab" id="tSignup" aria-selected="true">アカウント作成</button>
-        <button role="tab" id="tLogin" aria-selected="false">ログイン</button>
+<!-- ===== plan sheet ===== -->
+<div id="planWrap" class="sheet-wrap" hidden style="z-index:3500">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="planTitle">
+    <h2 id="planTitle">プランと支払い</h2>
+    <p id="planReason" class="note" hidden></p>
+    <div class="plans">
+      <div class="plan" id="pFree">
+        <h4>無料プラン<span>0円</span></h4>
+        <ul><li>グループ1つまで参加</li><li>家の記録（枚数・メモ）、お断りの家、配布範囲</li><li>メンバーの現在地</li><li>直近30日の記録を表示</li></ul>
       </div>
-      <form id="authForm" novalidate>
-        <div id="nameRow">
-          <label for="aName">表示名（地図に出る名前）</label>
-          <input id="aName" type="text" maxlength="20" placeholder="例：たなか" autocomplete="nickname">
-        </div>
-        <label for="aEmail">メールアドレス</label>
-        <input id="aEmail" type="email" autocomplete="email" inputmode="email">
-        <label for="aPass">パスワード（6文字以上）</label>
-        <input id="aPass" type="password" autocomplete="current-password">
-        <div class="err" id="authErr"></div>
-        <div class="row"><button id="authSubmit" class="btn primary wide" type="submit">アカウントを作成</button></div>
-      </form>
+      <div class="plan" id="pPersonal">
+        <h4>個人プラン<span>500円<small>／月（税込）</small></span></h4>
+        <ul><li>グループにいくつでも参加・作成</li><li>チャットと「こっちに来て」の呼び出し</li><li>メンバー別の集計、CSV出力</li><li>記録を期限なく表示</li></ul>
+        <button class="btn primary" id="buyPersonal">個人プランにする</button>
+      </div>
+      <div class="plan" id="pTeam">
+        <h4>チームプラン<span>1,500円<small>／月（税込）</small></span></h4>
+        <ul><li>このグループのメンバー全員が、個人プランと同じ機能を使える</li><li>メンバーは無料のままでOK。このグループは無料枠の「1つ」に数えません</li><li>グループの作成者が申し込めます</li></ul>
+        <button class="btn primary" id="buyTeam">このグループをチームプランにする</button>
+      </div>
     </div>
+    <div class="err" id="planErr"></div>
+    <div class="row">
+      <button class="btn" id="portalBtn">契約の確認・解約</button>
+      <button class="btn wide" id="planClose">閉じる</button>
+    </div>
+    <p class="note">お支払いはStripeの安全な決済画面で行います。解約はいつでもでき、期間の終わりまでは使えます。</p>
+  </div>
+</div>
+
+<!-- ===== auth screen（トップページ） ===== -->
+<div id="authScreen" class="screen lp" hidden>
+  <header class="lp-head pad-x">
+    <span class="lp-logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c-4 0-7 3-7 7 0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z" fill="currentColor"/><path d="M8.6 9.2l2.3 2.3 4.5-4.6" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>配布マップ</span>
+    <button class="lp-login" data-auth="login">ログイン</button>
+  </header>
+
+  <section class="lp-hero pad-x">
+    <div class="lp-hero-text">
+      <h1 class="lp-h1">そのポスト、<br>もう誰かが<br>入れたかも。</h1>
+      <p class="lp-lead">配った家を地図にワンタップで記録。チーム全員の画面にすぐ反映されるので、同じ家への二重配りがなくなります。</p>
+      <div class="lp-cta">
+        <button class="lp-btn lp-btn-main" data-auth="signup">無料でアカウント作成</button>
+        <button class="lp-btn lp-btn-sub" data-auth="login">ログイン</button>
+      </div>
+      <p class="lp-small">クレジットカードの登録は不要です。スマホのブラウザでそのまま使えます。</p>
+    </div>
+    <figure class="lp-demo" aria-label="地図上で配った家に印が付き、同じ家を記録しようとすると注意が出る様子">
+      <svg viewBox="0 0 360 300" role="img">
+        <rect width="360" height="300" rx="22" class="d-paper"/>
+        <path d="M0 108H360M0 214H360M118 0V300M246 0V300" class="d-road"/>
+        <g class="d-blocks">
+          <rect x="14" y="14" width="88" height="80" rx="6"/><rect x="134" y="14" width="96" height="80" rx="6"/><rect x="262" y="14" width="84" height="80" rx="6"/>
+          <rect x="14" y="124" width="88" height="76" rx="6"/><rect x="134" y="124" width="96" height="76" rx="6"/><rect x="262" y="124" width="84" height="76" rx="6"/>
+          <rect x="14" y="230" width="88" height="56" rx="6"/><rect x="134" y="230" width="96" height="56" rx="6"/><rect x="262" y="230" width="84" height="56" rx="6"/>
+        </g>
+        <g class="d-houses">
+          <rect x="24" y="24" width="30" height="26"/><rect x="62" y="24" width="30" height="26"/><rect x="24" y="58" width="30" height="26"/><rect x="62" y="58" width="30" height="26"/>
+          <rect x="144" y="24" width="76" height="60"/>
+          <rect x="272" y="24" width="30" height="26"/><rect x="308" y="24" width="30" height="26"/><rect x="272" y="58" width="66" height="26"/>
+          <rect x="24" y="134" width="30" height="26"/><rect x="62" y="134" width="30" height="26"/><rect x="24" y="166" width="68" height="26"/>
+          <rect x="144" y="134" width="34" height="56"/><rect x="186" y="134" width="34" height="56"/>
+          <rect x="272" y="134" width="66" height="56"/>
+          <rect x="24" y="240" width="30" height="36"/><rect x="62" y="240" width="30" height="36"/><rect x="144" y="240" width="76" height="36"/><rect x="272" y="240" width="66" height="36"/>
+        </g>
+        <path class="d-area" d="M10 10 L238 10 L238 206 L10 206 Z"/>
+        <g class="d-pin p1"><circle cx="39" cy="37" r="11" class="g"/><text x="39" y="41">1</text></g>
+        <g class="d-pin p2"><circle cx="77" cy="37" r="11" class="b"/><text x="77" y="41">1</text></g>
+        <g class="d-pin p3"><circle cx="182" cy="54" r="13" class="g"/><text x="182" y="58">24</text></g>
+        <g class="d-pin p4"><rect x="28" y="60" width="22" height="22" rx="4" class="r"/><text x="39" y="75">×</text></g>
+        <g class="d-pin p5"><circle cx="161" cy="162" r="11" class="b"/><text x="161" y="166">2</text></g>
+        <g class="d-pin p6"><circle cx="77" cy="147" r="11" class="g"/><text x="77" y="151">1</text></g>
+        <g class="d-tap"><circle cx="186" cy="58" r="16" class="ring"/></g>
+        <g class="d-warn">
+          <rect x="150" y="96" width="196" height="54" rx="12"/>
+          <text x="162" y="118" class="w1">すぐ近くに配布済み（24枚）</text>
+          <text x="162" y="138" class="w2">さとう・3分前</text>
+        </g>
+      </svg>
+      <figcaption>配った家には枚数が、お断りの家には×が付きます。同じ家を記録しようとすると、保存前にお知らせします。</figcaption>
+    </figure>
+  </section>
+
+  <section class="lp-sec pad-x">
+    <h2 class="lp-h2">ポスティングの「あるある」を、地図で解決</h2>
+    <dl class="lp-pairs">
+      <div><dt>同じマンションに、2人で入れてしまった</dt><dd>配った家は、枚数つきで全員の地図に表示されます。近くに記録があれば、保存する前にお知らせします。</dd></div>
+      <div><dt>「チラシお断り」の家に、また入れて苦情に</dt><dd>お断りの家を記録してチームで共有。次に回る人の地図にも赤い印で出ます。</dd></div>
+      <div><dt>誰がどこまで配ったか、終わるまで分からない</dt><dd>配る範囲を指で囲んで分担。範囲ごとに配った件数と枚数が自動で集計されます。</dd></div>
+      <div><dt>連絡のたびに電話をかけている</dt><dd>「こっちに来てください」をワンタップで送信。相手の地図に、あなたの位置と吹き出しが出ます。</dd></div>
+    </dl>
+  </section>
+
+  <section class="lp-sec pad-x">
+    <h2 class="lp-h2">使い始めるまで、3ステップ</h2>
+    <ol class="lp-steps">
+      <li><b>アカウントを作る</b><span>名前とメールアドレスだけで登録できます。</span></li>
+      <li><b>グループを作る</b><span>「〇〇塾 10月チラシ」のように、配布ごとに作れます。</span></li>
+      <li><b>LINEで仲間を招待</b><span>招待リンクを送るだけ。相手もすぐ同じ地図を見られます。</span></li>
+    </ol>
+  </section>
+
+  <section class="lp-sec pad-x" id="lpPrice">
+    <h2 class="lp-h2">料金</h2>
+    <p class="lp-p">ふだん使いは無料のまま。チャットや複数グループが必要になったら、有料プランを選べます。</p>
+    <div class="lp-price">
+      <div class="lp-plan"><h3>無料</h3><p class="lp-yen">0円</p><ul><li>グループ1つ</li><li>家の記録・お断りの家・配布範囲</li><li>メンバーの現在地</li><li>直近30日の記録</li></ul></div>
+      <div class="lp-plan lp-plan-hi"><h3>個人プラン</h3><p class="lp-yen">500円<small>／月</small></p><ul><li>グループ無制限</li><li>チャット・呼び出し</li><li>集計・CSV出力</li><li>記録を期限なく表示</li></ul></div>
+      <div class="lp-plan"><h3>チームプラン</h3><p class="lp-yen">1,500円<small>／月</small></p><ul><li>グループのメンバー全員が個人プランと同じ機能</li><li>業者・塾・団体向け</li></ul></div>
+    </div>
+    <p class="lp-small">料金はすべて税込です。有料プランはいつでも解約できます。</p>
+  </section>
+
+  <section class="lp-end pad-x">
+    <p class="lp-end-h">次の配布から、二重配りゼロへ。</p>
+    <div class="lp-cta">
+      <button class="lp-btn lp-btn-main" data-auth="signup">無料でアカウント作成</button>
+      <button class="lp-btn lp-btn-sub" data-auth="login">ログイン</button>
+    </div>
+  </section>
+  <footer class="lp-foot pad-x">© 配布マップ</footer>
+</div>
+
+<!-- ===== auth sheet ===== -->
+<div id="authWrap" class="sheet-wrap" hidden style="z-index:3200">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <h2 id="authTitle">アカウント作成</h2>
+    <div id="joinNotice" class="near" hidden>招待を受け取りました。ログインまたはアカウント作成をすると、招待されたグループ（コード：<b id="joinCodeTxt"></b>）に参加します。</div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tSignup" aria-selected="true">アカウント作成</button>
+      <button role="tab" id="tLogin" aria-selected="false">ログイン</button>
+    </div>
+    <form id="authForm" novalidate>
+      <div id="nameRow">
+        <label for="aName">表示名（地図に出る名前）</label>
+        <input id="aName" type="text" maxlength="20" placeholder="例：たなか" autocomplete="nickname">
+      </div>
+      <label for="aEmail">メールアドレス</label>
+      <input id="aEmail" type="email" autocomplete="email" inputmode="email">
+      <label for="aPass">パスワード（6文字以上）</label>
+      <input id="aPass" type="password" autocomplete="current-password">
+      <div class="err" id="authErr"></div>
+      <div class="row"><button id="authSubmit" class="btn primary wide" type="submit">アカウントを作成</button></div>
+    </form>
+    <div class="row"><button class="btn wide" id="authClose" type="button">閉じる</button></div>
   </div>
 </div>
 
@@ -338,6 +545,7 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
       <div class="row"><button id="joinBtn" class="btn wide">参加</button></div>
     </div>
     <div class="err" id="gErr"></div>
+    <div class="row"><button class="btn primary" id="gPlan" data-openplan="groups" hidden>プランを見る</button></div>
     <div class="row"><button id="gBack" class="btn" hidden>地図に戻る</button><button id="gLogout" class="btn">ログアウト</button></div>
   </div>
 </div>
@@ -368,7 +576,7 @@ const store = {
 
 const S = {
   sb:null, user:null, myName:'', groups:[], group:null,
-  names:new Map(), records:new Map(), areas:new Map(), myRole:'member', messages:[], pending:[],
+  names:new Map(), records:new Map(), areas:new Map(), myRole:'member', plan:{pro:false,team:false,free_groups:0}, messages:[], pending:[],
   peers:new Map(), peerMarkers:new Map(), flags:[],
   pos:null, follow:true, chan:null, pchan:null, pReady:false, lastTrack:0,
   unread:0, shareLoc: store.get('pm_shareLoc', true)
@@ -389,6 +597,7 @@ function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 function buzz(p){ try{ navigator.vibrate && navigator.vibrate(p); }catch(e){} }
 function jpErr(e){
   const m=(e&&e.message)||String(e);
+  if(/free_limit:/.test(m)) return m.replace(/^.*free_limit:/,'');
   if(/Invalid login credentials/i.test(m)) return 'メールアドレスかパスワードが違います。';
   if(/already registered|already been registered/i.test(m)) return 'このメールアドレスは登録済みです。「ログイン」から入ってください。';
   if(/at least 6/i.test(m)) return 'パスワードは6文字以上にしてください。';
@@ -639,7 +848,7 @@ function renderChat(){
 }
 $('chatLog').onclick=e=>{ const b=e.target.closest('[data-lat]'); if(b) focusOn(+b.dataset.lat,+b.dataset.lng); };
 function renderBadge(){ $('badge').hidden=!S.unread; $('badge').textContent=S.unread>9?'9+':S.unread; }
-function openChat(){ closeAllSheets(); S.unread=0; renderBadge(); renderChat(); $('chatWrap').hidden=false; const l=$('chatLog'); l.scrollTop=l.scrollHeight; }
+function openChat(){ if(!paid()){ openPlan('chat'); return; } closeAllSheets(); S.unread=0; renderBadge(); renderChat(); $('chatWrap').hidden=false; const l=$('chatLog'); l.scrollTop=l.scrollHeight; }
 $('chatBtn').onclick=openChat; $('chatClose').onclick=()=>{ $('chatWrap').hidden=true; };
 $('chatWrap').onclick=e=>{ if(e.target===$('chatWrap')) $('chatWrap').hidden=true; };
 
@@ -723,6 +932,48 @@ $('areaSave').onclick=async()=>{
   S.areas.set(a.id,a); drawArea(a); toast('配布範囲を保存しました');
 };
 
+/* ---------- プラン ---------- */
+function paid(){ return S.plan.pro||S.plan.team; }
+async function loadPlan(){
+  try{ const {data,error}=await S.sb.rpc('my_plan',{gid:S.group?S.group.id:null}); if(!error&&data) S.plan=data; }catch(e){}
+  applyPlan();
+}
+function applyPlan(){
+  $('chatPaid').hidden=paid();
+  $('statsLock').hidden=paid(); $('statsBody').hidden=!paid();
+  const cur=S.plan.pro?'pPersonal':(S.plan.team?'pTeam':'pFree');
+  for(const id of ['pFree','pPersonal','pTeam']) $(id).classList.toggle('current',id===cur);
+  $('buyPersonal').hidden=S.plan.pro; $('buyTeam').hidden=!S.group||S.plan.team||S.myRole!=='owner';
+  for(const id of ['pFree','pPersonal','pTeam']){ const h=$(id).querySelector('h4'); let t=h.querySelector('.tag'); if(id===cur){ if(!t){ t=document.createElement('span'); t.className='tag'; t.textContent='利用中'; h.firstChild.after(t);} } else if(t) t.remove(); }
+}
+const PLAN_REASON={chat:'チャットと呼び出しは、有料プランの機能です。',stats:'メンバー別の集計とCSV出力は、有料プランの機能です。',groups:'無料プランで参加できるグループは1つまでです。'};
+function openPlan(reason){
+  $('menuWrap').hidden=true; $('chatWrap').hidden=true;
+  $('planReason').hidden=!PLAN_REASON[reason]; $('planReason').textContent=PLAN_REASON[reason]||'';
+  $('planErr').textContent=''; applyPlan(); $('planWrap').hidden=false;
+}
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-openplan]'); if(b) openPlan(b.dataset.openplan); });
+$('planClose').onclick=()=>{ $('planWrap').hidden=true; };
+$('planWrap').onclick=e=>{ if(e.target===$('planWrap')) $('planWrap').hidden=true; };
+async function callFn(name,body,btn){
+  $('planErr').textContent=''; if(btn) btn.disabled=true;
+  try{
+    const {data,error}=await S.sb.functions.invoke(name,{body});
+    if(error){ let msg=error.message; try{ const j=await error.context.json(); if(j&&j.error) msg=j.error; }catch(x){} throw new Error(msg); }
+    if(data&&data.url){ location.href=data.url; return; }
+    throw new Error((data&&data.error)||'決済画面を開けませんでした');
+  }catch(e){ $('planErr').textContent=/Failed to send|FunctionsFetchError|404|not found/i.test(e.message)?'お支払いの準備がまだ整っていません。もう少しお待ちください。':jpErr(e); }
+  finally{ if(btn) btn.disabled=false; }
+}
+$('buyPersonal').onclick=()=>callFn('create-checkout',{plan:'personal'},$('buyPersonal'));
+$('buyTeam').onclick=()=>callFn('create-checkout',{plan:'team',group_id:S.group&&S.group.id},$('buyTeam'));
+$('portalBtn').onclick=()=>callFn('customer-portal',{},$('portalBtn'));
+async function afterCheckout(){
+  toast('お支払いありがとうございます。プランを反映しています…',{ms:6000});
+  for(let i=0;i<8;i++){ await new Promise(r=>setTimeout(r,2500)); await loadPlan(); if(paid()){ toast('有料プランが使えるようになりました'); if(S.group) enterGroup(S.group); return; } }
+  toast('反映に時間がかかっています。少し待ってから再読み込みしてください',{kind:'warn',ms:8000});
+}
+
 /* ---------- stats ---------- */
 function renderStats(){
   refreshAreaLabels();
@@ -737,6 +988,7 @@ function renderStats(){
   $('statRows').innerHTML=[...by].sort((a,b)=>b[1].all-a[1].all).map(([id,o])=>`<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${colorOf(id)};margin-right:6px"></span>${esc(nameOf(id))}</td><td>${o.today}</td><td>${o.all}</td><td>${o.n}</td></tr>`).join('')||'<tr><td colspan="4" class="note">まだ記録がありません</td></tr>';
 }
 $('csvBtn').onclick=()=>{
+  if(!paid()){ openPlan('stats'); return; }
   const head=['日時','メンバー','種類','枚数','メモ','緯度','経度'];
   const rows=[...S.records.values()].sort((a,b)=>a.created_at.localeCompare(b.created_at)).map(r=>[new Date(r.created_at).toLocaleString('ja-JP'),nameOf(r.user_id),r.kind==='refuse'?'お断り':'配った',r.count,r.note||'',r.lat.toFixed(7),r.lng.toFixed(7)]);
   const csv='﻿'+[head,...rows].map(x=>x.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -781,9 +1033,13 @@ function closeAllSheets(){ if(!$('recWrap').hidden) closeRec(); if(!$('areaWrap'
 /* ---------- auth ---------- */
 let authMode='signup';
 function setAuthMode(m){ authMode=m; $('tSignup').setAttribute('aria-selected',m==='signup'); $('tLogin').setAttribute('aria-selected',m==='login');
-  $('nameRow').hidden=m!=='signup'; $('authSubmit').textContent=m==='signup'?'アカウントを作成':'ログイン'; $('aPass').autocomplete=m==='signup'?'new-password':'current-password'; $('authErr').textContent=''; }
+  $('nameRow').hidden=m!=='signup'; $('authSubmit').textContent=m==='signup'?'アカウントを作成':'ログイン'; $('authTitle').textContent=m==='signup'?'アカウント作成':'ログイン'; $('aPass').autocomplete=m==='signup'?'new-password':'current-password'; $('authErr').textContent=''; }
 $('tSignup').onclick=()=>setAuthMode('signup'); $('tLogin').onclick=()=>setAuthMode('login');
-function showAuth(){ const j=store.get('pm_join',null); $('joinNotice').hidden=!j; if(j) $('joinCodeTxt').textContent=j; $('authScreen').hidden=false; }
+function openAuth(mode){ setAuthMode(mode); const j=store.get('pm_join',null); $('joinNotice').hidden=!j; if(j) $('joinCodeTxt').textContent=j; $('authWrap').hidden=false; setTimeout(()=>{ try{ (mode==='signup'?$('aName'):$('aEmail')).focus(); }catch(e){} },50); }
+function showAuth(){ $('authScreen').hidden=false; if(store.get('pm_join',null)) openAuth('signup'); }
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-auth]'); if(b) openAuth(b.dataset.auth); });
+$('authClose').onclick=()=>{ $('authWrap').hidden=true; };
+$('authWrap').onclick=e=>{ if(e.target===$('authWrap')) $('authWrap').hidden=true; };
 $('authForm').addEventListener('submit',async e=>{
   e.preventDefault(); const err=$('authErr'); err.textContent='';
   const email=$('aEmail').value.trim(), pass=$('aPass').value, name=$('aName').value.trim();
@@ -805,7 +1061,7 @@ $('authForm').addEventListener('submit',async e=>{
 /* ---------- groups ---------- */
 async function loadGroups(){ const {data,error}=await S.sb.from('groups').select('*').order('created_at'); if(error) throw error; S.groups=data||[]; }
 function showGroups(){
-  $('gsName').textContent=S.myName; $('gErr').textContent=''; $('gBack').hidden=!S.group;
+  $('gsName').textContent=S.myName; $('gErr').textContent=''; $('gPlan').hidden=true; $('gBack').hidden=!S.group;
   $('gList').innerHTML=S.groups.length?S.groups.map(g=>`<button class="gitem" data-g="${g.id}">${esc(g.name)}<small>開く ›</small></button>`).join(''):'<p class="note" style="margin:0">まだグループがありません。新しく作るか、招待コードで参加してください。</p>';
   $('groupScreen').hidden=false;
 }
@@ -826,7 +1082,7 @@ $('createBtn').onclick=async()=>{
     $('gErr').textContent='';
     await enterGroup(g);
     setTimeout(()=>openMenu('invite'),600);
-  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); }
+  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); if(/free_limit/.test(e.message||'')) $('gPlan').hidden=false; }
   finally{ $('createBtn').disabled=false; }
 };
 $('joinBtn').onclick=()=>joinByCode($('joinCode').value);
@@ -841,7 +1097,7 @@ async function joinByCode(code){
     if(!g||!g.id) g=S.groups.find(x=>x.invite_code===code.toLowerCase());
     if(!g) throw new Error('参加しましたが、グループを読み込めませんでした');
     await enterGroup(g); toast(`「${g.name}」に参加しました`);
-  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); }
+  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); if(/free_limit/.test(e.message||'')) $('gPlan').hidden=false; }
 }
 
 async function leaveGroup(){
@@ -872,6 +1128,7 @@ async function enterGroup(g){
   for(const r of S.records.values()) drawRec(r);
   for(const a of ar.data||[]){ S.areas.set(a.id,a); drawArea(a); }
   S.messages=(msg.data||[]).reverse(); renderChat(); renderStats(); flush();
+  await loadPlan();
   if(S.records.size && firstFix){ const b=L.latLngBounds([...S.records.values()].map(r=>[r.lat,r.lng])); map.fitBounds(b,{maxZoom:18,padding:[30,30]}); }
 
   S.chan=S.sb.channel('db-'+gid)
@@ -901,8 +1158,10 @@ async function afterLogin(user){
   const {data}=await S.sb.from('profiles').select('display_name').eq('id',user.id).maybeSingle();
   S.myName=(data&&data.display_name)||(user.user_metadata&&user.user_metadata.display_name)||(user.email||'').split('@')[0];
   S.names.set(user.id,S.myName);
-  $('authScreen').hidden=true;
+  loadPlan();
+  $('authScreen').hidden=true; $('authWrap').hidden=true;
   startGps(); keepAwake();
+  const ck=store.get('pm_checkout',null); if(ck){ store.del('pm_checkout'); if(ck==='success') setTimeout(afterCheckout,1500); else setTimeout(()=>toast('お支払いはキャンセルされました'),1500); }
   const join=store.get('pm_join',null);
   if(join){ await joinByCode(join); return; }
   try{ await loadGroups(); }catch(e){ toast('グループを読み込めません：'+jpErr(e),{kind:'warn',ms:8000}); }
@@ -923,6 +1182,7 @@ window.addEventListener('unhandledrejection',e=>{
 (async function init(){
   const q=new URLSearchParams(location.search);
   if(q.get('join')){ store.set('pm_join',q.get('join')); history.replaceState(null,'',location.pathname); }
+  const checkout=q.get('checkout'); if(checkout){ store.set('pm_checkout',checkout); history.replaceState(null,'',location.pathname); }
   if(!/^https:\/\//.test(SUPABASE_URL) || SUPABASE_ANON_KEY.length<20 || !window.supabase){ $('cfgScreen').hidden=false; return; }
   S.sb=window.supabase.createClient(SUPABASE_URL.trim(),SUPABASE_ANON_KEY.trim());
   let booted=false;
