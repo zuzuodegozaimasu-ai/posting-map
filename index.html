@@ -858,11 +858,18 @@ let drawing=false, drawEndedAt=0, drawPts=[], drawLine=null, drawPointer=null, a
 function inPoly(pt,poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [yi,xi]=poly[i],[yj,xj]=poly[j];
   if(((yi>pt.lat)!==(yj>pt.lat)) && (pt.lng < (xj-xi)*(pt.lat-yi)/(yj-yi)+xi)) c=!c; } return c; }
 function areaStats(a){ let n=0,sheets=0,refuse=0; for(const r of S.records.values()){ if(!inPoly(r,a.points)) continue; if(r.kind==='refuse') refuse++; else { n++; sheets+=r.count||0; } } return {n,sheets,refuse}; }
-function areaLabelIcon(a){ const st=areaStats(a), col=colorOf(a.user_id);
+const AREA_COLORS=['#e8590c','#1971c2','#2f9e44','#ae3ec9','#c2255c','#0c8599','#f08c00','#5f3dc4','#66a80f','#495057'];
+function areaColor(a){ let h=0; for(const c of String(a.id)) h=(h*31+c.charCodeAt(0))>>>0; return AREA_COLORS[h%AREA_COLORS.length]; }
+function newAreaId(){ // まだ使われていない色になるIDを選ぶ（範囲ごとに色が分かれるように）
+  const used=new Set([...S.areas.values()].map(areaColor));
+  for(let i=0;i<60;i++){ const id=uid(); if(!used.has(areaColor({id}))||used.size>=AREA_COLORS.length) return id; }
+  return uid();
+}
+function areaLabelIcon(a){ const st=areaStats(a), col=areaColor(a);
   return L.divIcon({className:'',iconSize:[0,0],html:`<div class="alabel" style="color:${col}"><b>${esc(a.name||'範囲')}</b>・${esc(nameOf(a.user_id))}　${st.n}件/${st.sheets}枚</div>`}); }
 function drawArea(a){
   undrawArea(a.id);
-  const col=colorOf(a.user_id);
+  const col=areaColor(a);
   const poly=L.polygon(a.points,{color:col,weight:3,dashArray:'8 6',fillColor:col,fillOpacity:.10,interactive:false}).addTo(map);
   const c=poly.getBounds().getCenter();
   const label=L.marker(c,{icon:areaLabelIcon(a),zIndexOffset:-500}).addTo(map);
@@ -925,7 +932,7 @@ $('areaCancel').onclick=()=>{ $('areaWrap').hidden=true; clearDraft(); };
 $('areaRedo').onclick=()=>{ $('areaWrap').hidden=true; clearDraft(); startDraw(); };
 $('areaSave').onclick=async()=>{
   if(!areaDraft) return;
-  const a={id:uid(),group_id:S.group.id,user_id:S.user.id,name:$('areaName').value.trim()||null,points:areaDraft,created_at:new Date().toISOString()};
+  const a={id:newAreaId(),group_id:S.group.id,user_id:S.user.id,name:$('areaName').value.trim()||null,points:areaDraft,created_at:new Date().toISOString()};
   $('areaSave').disabled=true;
   const {error}=await S.sb.from('areas').insert(a);
   $('areaSave').disabled=false;
@@ -1084,7 +1091,7 @@ $('createBtn').onclick=async()=>{
     $('gErr').textContent='';
     await enterGroup(g);
     setTimeout(()=>openMenu('invite'),600);
-  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); if(/free_limit/.test(e.message||'')) $('gPlan').hidden=false; }
+  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); if(/free_limit/.test(e.message||'')){ $('gPlan').hidden=false; openPlan('groups'); } }
   finally{ $('createBtn').disabled=false; }
 };
 $('joinBtn').onclick=()=>joinByCode($('joinCode').value);
@@ -1099,7 +1106,7 @@ async function joinByCode(code){
     if(!g||!g.id) g=S.groups.find(x=>x.invite_code===code.toLowerCase());
     if(!g) throw new Error('参加しましたが、グループを読み込めませんでした');
     await enterGroup(g); toast(`「${g.name}」に参加しました`);
-  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); if(/free_limit/.test(e.message||'')) $('gPlan').hidden=false; }
+  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); if(/free_limit/.test(e.message||'')){ $('gPlan').hidden=false; openPlan('groups'); } }
 }
 
 async function leaveGroup(){
