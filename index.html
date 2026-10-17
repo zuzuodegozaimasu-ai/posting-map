@@ -720,7 +720,7 @@ $('createBtn').onclick=async()=>{
     $('gErr').textContent='';
     await enterGroup(g);
     setTimeout(()=>openMenu('invite'),600);
-  }catch(e){ $('gErr').textContent='エラー：'+jpErr(e); showGroups(); }
+  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); }
   finally{ $('createBtn').disabled=false; }
 };
 $('joinBtn').onclick=()=>joinByCode($('joinCode').value);

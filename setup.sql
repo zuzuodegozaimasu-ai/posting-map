@@ -131,6 +131,14 @@ create policy "messages send" on public.messages for insert to authenticated wit
 -- ---------- リアルタイム配信 ----------
 alter publication supabase_realtime add table public.records, public.messages;
 
+-- ---------- アプリ（ログイン済みユーザー）からテーブルを使えるようにする ----------
+-- ※実際に見られる範囲は上のRLSで制限されます
+grant usage on schema public to authenticated;
+grant select on public.profiles, public.groups, public.members to authenticated;
+grant update on public.profiles to authenticated;
+grant delete on public.members to authenticated;
+grant select, insert, update, delete on public.records, public.messages to authenticated;
+
 -- ---------- このSQLより前に作ったアカウントのプロフィールを補完 ----------
 insert into public.profiles (id, display_name)
 select id, coalesce(nullif(raw_user_meta_data->>'display_name',''), split_part(email,'@',1))
