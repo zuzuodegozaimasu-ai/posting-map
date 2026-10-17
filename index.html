@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#14322b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>配布マップ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script>
+/* ============================================================
+   ★ ここだけ書き換えてください（Supabase の Project Settings → API）
+   ============================================================ */
+const SUPABASE_URL = 'https://ftybudbcypaugancoqug.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_rcF_Gh2egobkcZnrci16sw_cU_53zQn';
+</script>
+<style>
+/* Layout: full-screen map, slim group bar on top, thumb-zone bar at bottom, sheets slide up. High contrast for outdoor use. */
+:root{
+  --bg:#f3f5f2; --surface:#ffffff; --ink:#122420; --muted:#5b6b66; --line:#d5ddd8;
+  --brand:#14322b; --done:#1f8a5b; --refuse:#c8372d; --warn:#c98a00; --chat:#1f6fd1;
+  --shadow:0 2px 10px rgba(10,30,25,.18);
+  --font:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e1714; --surface:#17231f; --ink:#e8f0ec; --muted:#9db0a8; --line:#2c3b35;
+  --brand:#0b1d18; --done:#2fae76; --refuse:#e2554a; --warn:#e3a72b; --chat:#4a90e8; --shadow:0 2px 12px rgba(0,0,0,.5);
+  color-scheme:dark;}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);font-size:15px;display:flex;flex-direction:column;overflow:hidden;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--warn);outline-offset:2px}
+.pad-x{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* top bar */
+.top{background:var(--brand);color:#fff;display:flex;align-items:center;gap:8px;z-index:1000;
+  padding:calc(env(safe-area-inset-top,0px) + 8px) max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px))}
+.grpbtn{background:none;border:0;color:#fff;font-weight:800;font-size:16px;display:flex;align-items:center;gap:6px;min-width:0;margin-right:auto;padding:4px 0;text-align:left}
+.grpbtn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{font-size:12px;padding:4px 9px;border-radius:999px;background:rgba(255,255,255,.14);white-space:nowrap;font-variant-numeric:tabular-nums;color:#fff}
+.chip.good{background:#1f8a5b}.chip.mid{background:#b07900}.chip.bad{background:#b3322a}
+.iconbtn{background:rgba(255,255,255,.14);border:0;border-radius:10px;width:40px;height:36px;color:#fff;font-size:18px;line-height:1;flex:none}
+
+#map{flex:1;min-height:0;background:#dfe5e1}
+.fab{position:absolute;right:max(12px,env(safe-area-inset-right,0px));z-index:900;display:flex;flex-direction:column;gap:8px}
+.fab button{width:54px;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);font-size:12px;font-weight:700}
+.fab button.on{background:var(--brand);color:#fff}
+.hint{position:absolute;left:50%;transform:translateX(-50%);z-index:900;background:var(--surface);color:var(--ink);border:1px solid var(--line);
+  box-shadow:var(--shadow);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;white-space:nowrap;pointer-events:none}
+
+/* bottom bar */
+.bar{background:var(--surface);border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;z-index:1000;
+  padding:10px max(12px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.today{flex:1;min-width:0;font-size:12px;color:var(--muted);line-height:1.5}
+.today b{font-size:22px;color:var(--ink);font-variant-numeric:tabular-nums}
+.chatbtn{position:relative;border:0;border-radius:16px;min-height:60px;padding:0 22px;background:var(--chat);color:#fff;font-weight:800;font-size:17px}
+.badge{position:absolute;top:-6px;right:-6px;background:var(--refuse);color:#fff;border-radius:999px;min-width:22px;height:22px;font-size:12px;display:flex;align-items:center;justify-content:center;padding:0 6px;border:2px solid var(--surface)}
+
+/* toasts */
+#toasts{position:absolute;left:0;right:0;z-index:1500;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px))}
+.toast{pointer-events:auto;background:var(--ink);color:var(--bg);border-radius:14px;padding:10px 12px;box-shadow:var(--shadow);display:flex;align-items:center;gap:10px;max-width:520px;width:100%;font-size:14px;flex-wrap:wrap}
+.toast.warn{background:var(--warn);color:#1a1300}
+.toast.call{background:var(--chat);color:#fff}
+.toast .msg{flex:1;min-width:150px}
+.toast button{border:0;border-radius:10px;padding:8px 12px;font-weight:700;background:rgba(255,255,255,.22);color:inherit}
+
+/* sheets */
+.sheet-wrap{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:2000;display:flex;align-items:flex-end;justify-content:center}
+.sheet-wrap.clear{background:transparent;pointer-events:none}
+.sheet-wrap.clear .sheet{pointer-events:auto}
+.sheet{background:var(--surface);color:var(--ink);width:100%;max-width:560px;max-height:86%;overflow:auto;border-radius:20px 20px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.2);
+  padding:14px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet h2{font-size:18px;margin:2px 0 10px}
+.sheet h3{font-size:13px;margin:18px 0 8px;color:var(--muted);letter-spacing:.06em}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button{flex:1;border:1px solid var(--line);background:transparent;border-radius:10px;padding:9px;font-weight:700}
+.tabs button[aria-selected=true]{background:var(--brand);color:#fff;border-color:var(--brand)}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input[type=text],input[type=email],input[type=password],input[type=number]{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.btn{border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:12px 14px;font-weight:700;text-decoration:none;color:var(--ink);display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn.line{background:#06c755;color:#fff;border-color:#06c755}
+.btn.danger{color:var(--refuse);border-color:var(--refuse);background:transparent}
+.btn.wide{flex:1}
+.note{font-size:12px;color:var(--muted);line-height:1.6}
+.err{color:var(--refuse);font-size:13px;margin-top:8px;min-height:1em}
+
+/* record sheet */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg button{border:2px solid var(--line);background:transparent;border-radius:14px;padding:12px;font-weight:800;font-size:17px}
+.seg button[aria-pressed=true].k-done{background:var(--done);border-color:var(--done);color:#fff}
+.seg button[aria-pressed=true].k-refuse{background:var(--refuse);border-color:var(--refuse);color:#fff}
+.stepper{display:grid;grid-template-columns:64px 1fr 64px;gap:8px;align-items:center}
+.stepper button{height:58px;border-radius:14px;border:1px solid var(--line);background:var(--bg);font-size:28px;font-weight:700}
+.stepper input{text-align:center;font-size:28px!important;font-weight:800;height:58px;font-variant-numeric:tabular-nums}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.quick button{border:1px solid var(--line);background:transparent;border-radius:999px;padding:8px 14px;font-weight:700;font-variant-numeric:tabular-nums}
+.near{background:color-mix(in srgb,var(--warn) 18%,transparent);border:1px solid var(--warn);border-radius:12px;padding:10px;font-size:13px;margin-bottom:10px;line-height:1.5}
+
+/* chat */
+.chatlog{display:flex;flex-direction:column;gap:10px;max-height:42vh;overflow:auto;padding:4px 2px;margin-bottom:10px}
+.msg{max-width:85%;align-self:flex-start}
+.msg.mine{align-self:flex-end;text-align:right}
+.msg .who{font-size:11px;color:var(--muted);margin-bottom:2px}
+.msg .body{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:8px 12px;text-align:left;white-space:pre-wrap;word-break:break-word}
+.msg.mine .body{background:var(--chat);color:#fff;border-color:var(--chat)}
+.msg .loc{font-size:12px;color:var(--chat);background:none;border:0;padding:2px 0;font-weight:700}
+.phrases{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.phrases button{flex:none;border:1px solid var(--chat);color:var(--chat);background:transparent;border-radius:999px;padding:9px 14px;font-weight:700}
+.sendrow{display:flex;gap:8px;margin-top:8px}
+.sendrow input{flex:1;min-width:0}
+.sendrow button{flex:none}
+
+/* full screens (auth / groups) */
+.screen{position:fixed;inset:0;z-index:3000;background:var(--bg);overflow:auto}
+.screen-inner{max-width:460px;margin:0 auto;padding-top:calc(env(safe-area-inset-top,0px) + 28px);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 28px)}
+.logo{font-size:26px;font-weight:900;letter-spacing:.04em;margin:0}
+.lede{color:var(--muted);margin:6px 0 22px;line-height:1.6}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
+.glist{display:flex;flex-direction:column;gap:8px}
+.gitem{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--bg);text-align:left;font-weight:800;width:100%}
+.gitem small{font-weight:600;color:var(--muted)}
+.code{font-size:30px;font-weight:900;letter-spacing:.12em;font-variant-numeric:tabular-nums;text-align:center;padding:10px;border:2px dashed var(--line);border-radius:12px;user-select:all}
+#qr{background:#fff;padding:10px;border-radius:12px;display:inline-block;margin-top:10px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:10px}
+.stat b{display:block;font-size:24px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0}
+.toggle input{width:24px;height:24px}
+
+/* map markers */
+.pin{width:26px;height:26px;border-radius:50%;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:900;font-variant-numeric:tabular-nums}
+.pin.refuse{border-radius:5px;background:#c8372d!important;font-size:15px}
+.pin.pending{opacity:.55;border-style:dashed}
+.pin.ghost{background:transparent!important;border:3px dashed #c98a00;box-shadow:none}
+.peer{display:flex;flex-direction:column;align-items:center}
+.peer .dot{width:30px;height:30px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 3px rgba(31,111,209,.35),0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:13px}
+.peer .nm{margin-top:2px;background:rgba(18,36,32,.85);color:#fff;border-radius:6px;padding:1px 6px;font-size:11px;font-weight:700;white-space:nowrap}
+.peer.stale .dot{filter:grayscale(1);opacity:.6}
+.flag{font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))}
+.leaflet-tooltip.bubble{background:#1f6fd1;color:#fff;border:0;border-radius:12px;font-weight:800;font-size:14px;padding:6px 10px;box-shadow:0 2px 8px rgba(0,0,0,.35);white-space:normal;width:max-content;max-width:200px;font-family:var(--font)}
+.leaflet-tooltip-top.bubble::before{border-top-color:#1f6fd1}
+.leaflet-popup-content{font-family:var(--font);font-size:13px;line-height:1.6}
+.leaflet-popup-content button{margin-top:6px;margin-right:4px;border:1px solid #14322b;color:#14322b;background:#fff;border-radius:8px;padding:6px 12px;font-weight:700}
+.leaflet-control-attribution{font-size:10px}
+</style>
+</head>
+<body>
+
+<!-- ===== main app ===== -->
+<header class="top">
+  <button id="grpBtn" class="grpbtn" aria-label="グループを切り替え"><span id="grpName">配布マップ</span> ▾</button>
+  <span id="liveChip" class="chip">接続中…</span>
+  <button id="menuBtn" class="iconbtn" aria-label="メニュー">☰</button>
+</header>
+<div id="map" role="application" aria-label="配布地図"></div>
+<div id="hint" class="hint">記録したい家をタップ</div>
+<div id="toasts" aria-live="polite"></div>
+<div class="fab" id="fab">
+  <button id="locBtn" class="on" aria-label="現在地を追う">現在地</button>
+  <button id="layerBtn" aria-label="地図の種類を切り替え">写真</button>
+</div>
+<nav class="bar">
+  <div class="today" id="today">今日の配布<br><b>0</b> 枚</div>
+  <button id="chatBtn" class="chatbtn">チャット・連絡<span id="badge" class="badge" hidden>0</span></button>
+</nav>
+
+<!-- ===== record sheet ===== -->
+<div id="recWrap" class="sheet-wrap clear" hidden>
+  <div class="sheet" role="dialog" aria-modal="false" aria-labelledby="recTitle">
+    <h2 id="recTitle">この家を記録</h2>
+    <div id="recNear" class="near" hidden></div>
+    <div class="seg">
+      <button id="kDone" class="k-done" aria-pressed="true">配った</button>
+      <button id="kRefuse" class="k-refuse" aria-pressed="false">お断り</button>
+    </div>
+    <div id="countBox">
+      <label for="countIn">枚数（マンションは配った数）</label>
+      <div class="stepper">
+        <button id="minusBtn" aria-label="1枚減らす">−</button>
+        <input id="countIn" type="number" inputmode="numeric" min="1" max="9999" value="1">
+        <button id="plusBtn" aria-label="1枚増やす">＋</button>
+      </div>
+      <div class="quick" id="quickCounts"></div>
+    </div>
+    <label for="noteIn">メモ（任意）</label>
+    <input id="noteIn" type="text" maxlength="100" placeholder="例：〇〇マンション／ポストが裏側">
+    <div class="row">
+      <button id="recDelete" class="btn danger" hidden>削除</button>
+      <button id="recCancel" class="btn">やめる</button>
+      <button id="recSave" class="btn primary wide">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== chat sheet ===== -->
+<div id="chatWrap" class="sheet-wrap" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="chatTitle">
+    <h2 id="chatTitle">チャット・連絡</h2>
+    <div class="chatlog" id="chatLog"></div>
+    <div class="phrases" id="phrases"></div>
+    <div class="sendrow">
+      <input id="chatIn" type="text" maxlength="500" placeholder="メッセージ" enterkeyhint="send">
+      <button id="sendBtn" class="btn primary">送信</button>
+    </div>
+    <div class="toggle"><span class="note">メッセージに自分の位置を付ける（地図上に吹き出しで表示）</span><input id="attachLoc" type="checkbox" checked></div>
+    <div class="row"><button id="chatClose" class="btn wide">閉じる</button></div>
+  </div>
+</div>
+
+<!-- ===== menu sheet ===== -->
+<div id="menuWrap" class="sheet-wrap" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="invite" aria-selected="true">メンバー招待</button>
+      <button role="tab" data-tab="stats" aria-selected="false">集計</button>
+      <button role="tab" data-tab="me" aria-selected="false">設定</button>
+    </div>
+    <section id="tab-invite">
+      <h2 id="menuTitle">「<span id="invGrp"></span>」に招待</h2>
+      <p class="note">相手はリンクを開いてアカウントを作ると、このグループに参加できます。</p>
+      <div class="code" id="invCode"></div>
+      <div class="row">
+        <a id="lineBtn" class="btn line wide" href="#" target="_blank" rel="noopener">LINEで送る</a>
+        <button id="shareBtn" class="btn primary wide">共有…</button>
+      </div>
+      <div class="row">
+        <button id="copyBtn" class="btn wide">リンクをコピー</button>
+        <button id="qrBtn" class="btn wide">QRコード</button>
+      </div>
+      <div id="qrBox" hidden><div id="qr"></div></div>
+      <h3>メンバー</h3>
+      <table><tbody id="memberList"></tbody></table>
+    </section>
+    <section id="tab-stats" hidden>
+      <h2>集計</h2>
+      <div class="stats">
+        <div class="stat"><b id="sTodaySheets">0</b><span>今日の枚数（全体）</span></div>
+        <div class="stat"><b id="sAllSheets">0</b><span>累計の枚数</span></div>
+        <div class="stat"><b id="sHouses">0</b><span>配った件数</span></div>
+        <div class="stat"><b id="sRefuse">0</b><span>お断りの家</span></div>
+      </div>
+      <h3>メンバー別</h3>
+      <table><thead><tr><th>メンバー</th><th>今日</th><th>累計の枚数</th><th>件数</th></tr></thead><tbody id="statRows"></tbody></table>
+      <div class="row"><button id="csvBtn" class="btn">CSVで保存</button></div>
+    </section>
+    <section id="tab-me" hidden>
+      <h2>設定</h2>
+      <div class="toggle"><span>自分の現在地をメンバーに表示する</span><input id="shareLocIn" type="checkbox" checked></div>
+      <p class="note">オフにすると、地図上のあなたのアイコンが他のメンバーから見えなくなります。アプリを閉じている間は、オンでも位置は送られません。</p>
+      <p class="note">ログイン中：<b id="meName"></b>（<span id="meEmail"></span>）</p>
+      <div class="row">
+        <button id="leaveBtn" class="btn danger">このグループを抜ける</button>
+        <button id="logoutBtn" class="btn">ログアウト</button>
+      </div>
+    </section>
+    <div class="row"><button id="menuClose" class="btn wide">閉じる</button></div>
+  </div>
+</div>
+
+<!-- ===== auth screen ===== -->
+<div id="authScreen" class="screen" hidden>
+  <div class="screen-inner pad-x">
+    <p class="logo">配布マップ</p>
+    <p class="lede">チームで配ったポストを地図で共有して、二重配りを防ぎます。</p>
+    <div id="joinNotice" class="card" hidden>招待を受け取りました。ログインまたはアカウント作成をすると、グループ「<b id="joinCodeTxt"></b>」に参加します。</div>
+    <div class="card">
+      <div class="tabs" role="tablist">
+        <button role="tab" id="tSignup" aria-selected="true">アカウント作成</button>
+        <button role="tab" id="tLogin" aria-selected="false">ログイン</button>
+      </div>
+      <form id="authForm" novalidate>
+        <div id="nameRow">
+          <label for="aName">表示名（地図に出る名前）</label>
+          <input id="aName" type="text" maxlength="20" placeholder="例：たなか" autocomplete="nickname">
+        </div>
+        <label for="aEmail">メールアドレス</label>
+        <input id="aEmail" type="email" autocomplete="email" inputmode="email">
+        <label for="aPass">パスワード（6文字以上）</label>
+        <input id="aPass" type="password" autocomplete="current-password">
+        <div class="err" id="authErr"></div>
+        <div class="row"><button id="authSubmit" class="btn primary wide" type="submit">アカウントを作成</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ===== groups screen ===== -->
+<div id="groupScreen" class="screen" hidden>
+  <div class="screen-inner pad-x">
+    <p class="logo">グループ</p>
+    <p class="lede"><span id="gsName"></span> さん、参加するグループを選んでください。</p>
+    <div class="card">
+      <div class="glist" id="gList"></div>
+    </div>
+    <div class="card">
+      <label for="newGrp" style="margin-top:0">新しいグループを作る</label>
+      <input id="newGrp" type="text" maxlength="40" placeholder="例：〇〇塾 10月チラシ">
+      <div class="row"><button id="createBtn" class="btn primary wide">作成</button></div>
+    </div>
+    <div class="card">
+      <label for="joinCode" style="margin-top:0">招待コードで参加</label>
+      <input id="joinCode" type="text" maxlength="12" placeholder="8文字のコード" autocapitalize="off" autocomplete="off">
+      <div class="row"><button id="joinBtn" class="btn wide">参加</button></div>
+    </div>
+    <div class="err" id="gErr"></div>
+    <div class="row"><button id="gBack" class="btn" hidden>地図に戻る</button><button id="gLogout" class="btn">ログアウト</button></div>
+  </div>
+</div>
+
+<!-- ===== not configured ===== -->
+<div id="cfgScreen" class="screen" hidden>
+  <div class="screen-inner pad-x">
+    <p class="logo">配布マップ</p>
+    <div class="card"><b>接続設定がまだです。</b><p class="note">index.html の先頭にある SUPABASE_URL と SUPABASE_ANON_KEY に、Supabase の Project URL と anon public key を書き込んでからアップロードしてください。</p></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+"use strict";
+const NEAR_M = 6;                 // この距離以内に記録があれば注意表示
+const BUBBLE_MS = 3*60*1000;      // 吹き出しを出しておく時間
+const PEER_STALE_MS = 2*60*1000;  // これ以上更新がない仲間はグレー表示
+const PHRASES = ['こっちに来てください','今ここにいます','このエリア終わりました','チラシが足りません','休憩します','戻ります'];
+const $ = id => document.getElementById(id);
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } },
+  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+
+const S = {
+  sb:null, user:null, myName:'', groups:[], group:null,
+  names:new Map(), records:new Map(), messages:[], pending:[],
+  peers:new Map(), peerMarkers:new Map(), flags:[],
+  pos:null, follow:true, chan:null, pchan:null, pReady:false, lastTrack:0,
+  unread:0, shareLoc: store.get('pm_shareLoc', true)
+};
+
+/* ---------- utils ---------- */
+function dist(a,b){ const R=6371000,t=Math.PI/180,dLat=(b.lat-a.lat)*t,dLng=(b.lng-a.lng)*t;
+  const x=Math.sin(dLat/2)**2+Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
+const PALETTE=['#1f6fd1','#d1491f','#7a3cc9','#0e8f8f','#b8327a','#5a7d12','#a86a00','#3b5bdb'];
+function colorOf(id){ let h=0; for(const c of String(id||'?')) h=(h*31+c.charCodeAt(0))>>>0; return PALETTE[h%PALETTE.length]; }
+function nameOf(id){ return S.names.get(id) || 'メンバー'; }
+function ago(iso){ const s=Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
+  if(s<60) return 'たった今'; if(s<3600) return Math.floor(s/60)+'分前'; if(s<86400) return Math.floor(s/3600)+'時間前'; return Math.floor(s/86400)+'日前'; }
+function hhmm(iso){ const d=new Date(iso); return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
+function isToday(iso){ const d=new Date(iso),n=new Date(); return d.toDateString()===n.toDateString(); }
+function uid(){ return crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);}); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function buzz(p){ try{ navigator.vibrate && navigator.vibrate(p); }catch(e){} }
+function jpErr(e){
+  const m=(e&&e.message)||String(e);
+  if(/Invalid login credentials/i.test(m)) return 'メールアドレスかパスワードが違います。';
+  if(/already registered|already been registered/i.test(m)) return 'このメールアドレスは登録済みです。「ログイン」から入ってください。';
+  if(/at least 6/i.test(m)) return 'パスワードは6文字以上にしてください。';
+  if(/Email not confirmed/i.test(m)) return 'メールの確認がまだです。届いたメールのリンクを開いてから、もう一度ログインしてください。';
+  if(/rate limit/i.test(m)) return '短時間に操作が多すぎます。少し待ってからもう一度試してください。';
+  if(/valid email|invalid format/i.test(m)) return 'メールアドレスの形式を確認してください。';
+  if(/Failed to fetch|NetworkError/i.test(m)) return '通信できません。電波の良い場所でもう一度試してください。';
+  return m+(e&&e.details?'（'+e.details+'）':'')+(e&&e.hint?' ヒント：'+e.hint:'')+(e&&e.code&&!/^\d+$/.test(m)?' ['+e.code+']':'');
+}
+
+/* ---------- toasts ---------- */
+function toast(msg,opts={}){
+  const el=document.createElement('div'); el.className='toast'+(opts.kind?' '+opts.kind:'');
+  const m=document.createElement('div'); m.className='msg'; m.textContent=msg; el.appendChild(m);
+  for(const a of (opts.actions||[])){ const b=document.createElement('button'); b.textContent=a.label; b.onclick=()=>{el.remove();a.fn();}; el.appendChild(b); }
+  $('toasts').appendChild(el); if(opts.ms!==0) setTimeout(()=>el.remove(),opts.ms||3500); return el;
+}
+
+/* ---------- map ---------- */
+const map=L.map('map',{zoomControl:false}).setView([34.867,137.06],17);
+const gsiAttr='<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>';
+const layers={
+  std:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',{maxNativeZoom:18,maxZoom:21,attribution:gsiAttr}),
+  photo:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{maxNativeZoom:18,maxZoom:21,attribution:gsiAttr})
+};
+let layerName='std'; layers.std.addTo(map);
+$('layerBtn').onclick=()=>{ map.removeLayer(layers[layerName]); layerName=layerName==='std'?'photo':'std'; layers[layerName].addTo(map); $('layerBtn').textContent=layerName==='std'?'写真':'地図'; };
+const meDot=L.circleMarker([0,0],{radius:8,color:'#fff',weight:3,fillColor:'#1f6fd1',fillOpacity:1});
+const meAcc=L.circle([0,0],{radius:10,color:'#1f6fd1',weight:1,fillOpacity:.1,interactive:false});
+const recMarkers=new Map();
+
+function recIcon(r){
+  const pend=S.pending.includes(r.id);
+  const txt=r.kind==='refuse'?'×':(r.count>99?'99+':r.count);
+  return L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],
+    html:`<div class="pin ${r.kind==='refuse'?'refuse':''} ${pend?'pending':''}" style="background:${colorOf(r.user_id)}">${txt}</div>`});
+}
+function recPopup(r){
+  const mine=S.user && r.user_id===S.user.id;
+  return `<b>${r.kind==='refuse'?'お断りの家':'配った：'+r.count+'枚'}</b><br>${esc(nameOf(r.user_id))}・${hhmm(r.created_at)}（${ago(r.created_at)}）`
+    +(r.note?`<br>📝 ${esc(r.note)}`:'')
+    +(mine?`<br><button data-edit="${r.id}">編集</button>`:'');
+}
+function drawRec(r){
+  let m=recMarkers.get(r.id);
+  if(!m){ m=L.marker([r.lat,r.lng],{icon:recIcon(r)}); m.bindPopup(()=>recPopup(S.records.get(r.id)||r)); m.addTo(map); recMarkers.set(r.id,m); }
+  else { m.setLatLng([r.lat,r.lng]); m.setIcon(recIcon(r)); }
+}
+function undrawRec(id){ const m=recMarkers.get(id); if(m){ map.removeLayer(m); recMarkers.delete(id); } }
+function clearMap(){ for(const id of [...recMarkers.keys()]) undrawRec(id); for(const m of S.peerMarkers.values()) map.removeLayer(m); S.peerMarkers.clear(); for(const f of S.flags) map.removeLayer(f.m); S.flags=[]; }
+
+let lastPopupClose=0;
+map.on('popupclose',()=>{ lastPopupClose=Date.now(); });
+map.on('popupopen',e=>{ const b=e.popup.getElement().querySelector('[data-edit]'); if(b) b.onclick=()=>{ map.closePopup(); openRec(null,S.records.get(b.dataset.edit)); }; });
+map.on('dragstart',()=>setFollow(false));
+map.on('click',e=>{
+  if(!S.group) return;
+  if(Date.now()-lastPopupClose<400) return;
+  if(!$('recWrap').hidden){ moveGhost(e.latlng); return; }
+  openRec(e.latlng,null);
+});
+
+/* ---------- GPS ---------- */
+function setFollow(v){ S.follow=v; $('locBtn').classList.toggle('on',v); }
+$('locBtn').onclick=()=>{ setFollow(true); if(S.pos) map.setView([S.pos.lat,S.pos.lng],Math.max(map.getZoom(),19)); else toast('現在地を取得中です'); };
+let firstFix=true;
+function onPos(p){
+  S.pos={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy,ts:Date.now()};
+  meDot.setLatLng([S.pos.lat,S.pos.lng]); meAcc.setLatLng([S.pos.lat,S.pos.lng]).setRadius(S.pos.acc);
+  if(!map.hasLayer(meDot)){ meAcc.addTo(map); meDot.addTo(map); }
+  if(firstFix){ map.setView([S.pos.lat,S.pos.lng],19); firstFix=false; }
+  else if(S.follow && $('recWrap').hidden) map.panTo([S.pos.lat,S.pos.lng]);
+  trackMe(false);
+}
+function onPosErr(e){ if(e.code===1) toast('位置情報が許可されていません。地図での記録はできますが、現在地は表示されません。',{kind:'warn',ms:7000}); }
+function startGps(){ if('geolocation' in navigator) navigator.geolocation.watchPosition(onPos,onPosErr,{enableHighAccuracy:true,maximumAge:5000,timeout:30000}); }
+let wakeLock=null;
+async function keepAwake(){ try{ if('wakeLock' in navigator && document.visibilityState==='visible') wakeLock=await navigator.wakeLock.request('screen'); }catch(e){} }
+document.addEventListener('visibilitychange',()=>{ keepAwake(); if(document.visibilityState==='visible'){ trackMe(true); flush(); } });
+
+/* ---------- record sheet ---------- */
+let recCtx=null, ghost=null;
+const QUICK=[1,2,5,10,20,30,50];
+$('quickCounts').innerHTML=QUICK.map(n=>`<button data-n="${n}">${n}</button>`).join('');
+$('quickCounts').onclick=e=>{ const n=e.target.dataset.n; if(n){ $('countIn').value=n; buzz(15); } };
+$('minusBtn').onclick=()=>{ $('countIn').value=Math.max(1,(parseInt($('countIn').value)||1)-1); buzz(10); };
+$('plusBtn').onclick=()=>{ $('countIn').value=Math.min(9999,(parseInt($('countIn').value)||0)+1); buzz(10); };
+function setKind(k){ $('kDone').setAttribute('aria-pressed',k==='done'); $('kRefuse').setAttribute('aria-pressed',k==='refuse'); $('countBox').hidden=k==='refuse'; recCtx.kind=k; }
+$('kDone').onclick=()=>setKind('done'); $('kRefuse').onclick=()=>setKind('refuse');
+function moveGhost(ll){ if(!recCtx || recCtx.rec) return; recCtx.latlng=ll; ghost.setLatLng(ll); showNear(ll); }
+function showNear(ll){
+  let near=null,nd=Infinity;
+  for(const r of S.records.values()){ if(recCtx.rec && r.id===recCtx.rec.id) continue; const d=dist({lat:ll.lat,lng:ll.lng},r); if(d<NEAR_M&&d<nd){near=r;nd=d;} }
+  const box=$('recNear');
+  if(near){ box.hidden=false; box.innerHTML=`⚠ すぐ近くに<b>${near.kind==='refuse'?'お断りの家':'配布済み（'+near.count+'枚）'}</b>があります<br>${esc(nameOf(near.user_id))}・${ago(near.created_at)}${near.note?'・'+esc(near.note):''}<br><span class="note">別の家なら、そのまま保存してください。</span>`; buzz([60,40,60]); }
+  else box.hidden=true;
+}
+function openRec(latlng,rec){
+  closeAllSheets();
+  recCtx={latlng: rec?L.latLng(rec.lat,rec.lng):latlng, rec, kind: rec?rec.kind:'done'};
+  $('recTitle').textContent=rec?'記録を編集':'この家を記録';
+  $('countIn').value=rec?Math.max(1,rec.count):1;
+  $('noteIn').value=rec?(rec.note||''):'';
+  $('recDelete').hidden=!rec;
+  setKind(recCtx.kind);
+  if(!rec){ ghost=L.marker(latlng,{icon:L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],html:'<div class="pin ghost"></div>'}),interactive:false}).addTo(map); }
+  showNear(recCtx.latlng);
+  $('recWrap').hidden=false;
+  // シートで隠れないように少し上へずらす
+  const p=map.latLngToContainerPoint(recCtx.latlng), h=map.getSize().y;
+  if(p.y>h*0.45) map.panBy([0,p.y-h*0.3]);
+}
+function closeRec(){ $('recWrap').hidden=true; if(ghost){ map.removeLayer(ghost); ghost=null; } recCtx=null; }
+$('recCancel').onclick=closeRec;
+$('recSave').onclick=()=>{
+  if(!recCtx) return;
+  const count=recCtx.kind==='refuse'?0:Math.min(9999,Math.max(1,parseInt($('countIn').value)||1));
+  const note=$('noteIn').value.trim()||null;
+  if(recCtx.rec){
+    const r=Object.assign({},recCtx.rec,{kind:recCtx.kind,count,note,updated_at:new Date().toISOString()});
+    S.records.set(r.id,r); drawRec(r); queue(r.id);
+    toast('記録を更新しました');
+  } else {
+    const r={id:uid(),group_id:S.group.id,user_id:S.user.id,kind:recCtx.kind,count,note,lat:recCtx.latlng.lat,lng:recCtx.latlng.lng,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+    S.records.set(r.id,r); drawRec(r); queue(r.id);
+    buzz(50);
+    toast(r.kind==='refuse'?'お断りの家を記録しました':`${count}枚 配ったを記録しました`,{ms:5000,actions:[{label:'取り消し',fn:()=>deleteRec(r.id)}]});
+  }
+  closeRec(); renderStats();
+};
+$('recDelete').onclick=()=>{ if(recCtx&&recCtx.rec){ const id=recCtx.rec.id; closeRec(); deleteRec(id); } };
+async function deleteRec(id){
+  if(!S.records.has(id)) return;
+  S.records.delete(id); undrawRec(id); S.pending=S.pending.filter(x=>x!==id); savePending(); renderStats();
+  const {error}=await S.sb.from('records').delete().eq('id',id);
+  toast(error?'削除できませんでした：'+jpErr(error):'記録を削除しました',{kind:error?'warn':''});
+}
+
+/* ---------- sync records ---------- */
+function pendKey(){ return 'pm_pend_'+(S.group?S.group.id:''); }
+function savePending(){ store.set(pendKey(), S.pending.map(id=>S.records.get(id)).filter(Boolean)); }
+function queue(id){ if(!S.pending.includes(id)) S.pending.push(id); savePending(); drawRec(S.records.get(id)); flush(); }
+let flushing=false;
+async function flush(){
+  if(!S.sb||!S.group||flushing||!S.pending.length){ updateChip(); return; }
+  flushing=true;
+  const ids=[...S.pending], rows=ids.map(id=>S.records.get(id)).filter(Boolean);
+  const {error}=await S.sb.from('records').upsert(rows);
+  flushing=false;
+  if(error){ updateChip(); if(!/fetch|network/i.test(error.message)) toast('保存できませんでした：'+jpErr(error),{kind:'warn'}); return; }
+  S.pending=S.pending.filter(id=>!ids.includes(id)); savePending();
+  for(const r of rows) drawRec(r); updateChip();
+}
+setInterval(flush,10000); window.addEventListener('online',flush);
+function updateChip(){
+  const c=$('liveChip');
+  if(S.pending.length){ c.textContent=`未送信 ${S.pending.length}件`; c.className='chip mid'; return; }
+  const online=[...S.peers.values()].filter(p=>Date.now()-p.t<PEER_STALE_MS).length+1;
+  c.textContent=S.pReady?`● ${online}人オンライン`:'接続中…'; c.className='chip '+(S.pReady?'good':'');
+}
+
+/* ---------- live members (presence) ---------- */
+function trackMe(force){
+  if(!S.pchan||!S.pReady) return;
+  if(!force && Date.now()-S.lastTrack<5000) return;
+  S.lastTrack=Date.now();
+  const p=(S.shareLoc&&S.pos)?{lat:S.pos.lat,lng:S.pos.lng,acc:Math.round(S.pos.acc)}:{lat:null,lng:null};
+  S.pchan.track(Object.assign({name:S.myName,t:Date.now()},p)).catch(()=>{});
+}
+function syncPeers(){
+  const st=S.pchan.presenceState(), seen=new Set();
+  for(const [key,arr] of Object.entries(st)){
+    if(key===S.user.id||!arr.length) continue;
+    const p=arr[arr.length-1]; seen.add(key);
+    if(p.name && !S.names.has(key)) S.names.set(key,p.name);
+    S.peers.set(key,{name:p.name||nameOf(key),lat:p.lat,lng:p.lng,t:p.t||Date.now()});
+  }
+  for(const k of [...S.peers.keys()]) if(!seen.has(k)) S.peers.delete(k);
+  drawPeers(); updateChip();
+}
+function peerIcon(id,p){
+  const stale=Date.now()-p.t>PEER_STALE_MS;
+  return L.divIcon({className:'',iconSize:[80,48],iconAnchor:[40,16],
+    html:`<div class="peer ${stale?'stale':''}"><div class="dot" style="background:${colorOf(id)}">${esc((p.name||'?').slice(0,1))}</div><div class="nm">${esc(p.name)}</div></div>`});
+}
+function drawPeers(){
+  for(const [id,m] of S.peerMarkers){ const p=S.peers.get(id); if(!p||p.lat==null){ map.removeLayer(m); S.peerMarkers.delete(id); } }
+  for(const [id,p] of S.peers){
+    if(p.lat==null) continue;
+    let m=S.peerMarkers.get(id);
+    if(!m){ m=L.marker([p.lat,p.lng],{icon:peerIcon(id,p),zIndexOffset:1000}); m.on('click',()=>openChat()); m.addTo(map); S.peerMarkers.set(id,m); }
+    else { m.setLatLng([p.lat,p.lng]); m.setIcon(peerIcon(id,p)); }
+    const b=bubbles.get(id);
+    if(b && Date.now()-b.t<BUBBLE_MS){ if(!m.getTooltip()) m.bindTooltip(esc(b.text),{permanent:true,direction:'top',className:'bubble',offset:[0,-20]}).openTooltip(); }
+    else if(m.getTooltip()) m.unbindTooltip();
+  }
+}
+setInterval(()=>{ drawPeers(); updateChip(); pruneFlags(); },15000);
+
+/* ---------- chat ---------- */
+const bubbles=new Map(); // user_id -> {text,t}
+$('phrases').innerHTML=PHRASES.map(p=>`<button>${p}</button>`).join('');
+$('phrases').onclick=e=>{ if(e.target.tagName==='BUTTON') sendMsg(e.target.textContent,true); };
+$('sendBtn').onclick=()=>{ const t=$('chatIn').value.trim(); if(t) sendMsg(t,$('attachLoc').checked); };
+$('chatIn').addEventListener('keydown',e=>{ if(e.key==='Enter' && !e.isComposing){ e.preventDefault(); $('sendBtn').click(); } });
+async function sendMsg(text,withLoc){
+  const loc=withLoc&&S.pos?{lat:S.pos.lat,lng:S.pos.lng}:{lat:null,lng:null};
+  if(withLoc && !S.pos) toast('現在地が取れていないため、位置なしで送ります',{kind:'warn'});
+  const m={id:uid(),group_id:S.group.id,user_id:S.user.id,body:text,lat:loc.lat,lng:loc.lng,created_at:new Date().toISOString()};
+  $('chatIn').value='';
+  addMsg(m,true);
+  const {error}=await S.sb.from('messages').insert(m);
+  if(error){ toast('送信できませんでした：'+jpErr(error),{kind:'warn',ms:6000}); S.messages=S.messages.filter(x=>x.id!==m.id); renderChat(); }
+  else buzz(30);
+}
+function addMsg(m,mine){
+  if(S.messages.some(x=>x.id===m.id)) return;
+  S.messages.push(m); if(S.messages.length>200) S.messages.shift();
+  renderChat();
+  const fresh=Date.now()-new Date(m.created_at).getTime()<BUBBLE_MS;
+  if(!fresh) return;
+  if(m.user_id===S.user.id){ meDot.bindTooltip(esc(m.body),{permanent:true,direction:'top',className:'bubble',offset:[0,-10]}).openTooltip(); setTimeout(()=>{ if(meDot.getTooltip()) meDot.unbindTooltip(); },60000); }
+  else {
+    bubbles.set(m.user_id,{text:m.body,t:Date.now()});
+    const pm=S.peerMarkers.get(m.user_id); if(pm && pm.getTooltip()) pm.unbindTooltip();
+    if(m.lat!=null && !pm) addFlag(m);
+    drawPeers();
+    if(!mine){
+      buzz([120,60,120]);
+      if($('chatWrap').hidden){ S.unread++; renderBadge(); }
+      toast(`${nameOf(m.user_id)}：${m.body}`,{kind:'call',ms:8000,actions:m.lat!=null?[{label:'地図で見る',fn:()=>focusOn(m.lat,m.lng)}]:[{label:'開く',fn:openChat}]});
+    }
+  }
+}
+function addFlag(m){ // 仲間の現在地が見えない時は、送信位置に旗を立てる
+  const f=L.marker([m.lat,m.lng],{icon:L.divIcon({className:'',iconSize:[30,30],iconAnchor:[6,28],html:'<div class="flag">🚩</div>'})}).addTo(map);
+  f.bindTooltip(`${esc(nameOf(m.user_id))}：${esc(m.body)}`,{permanent:true,direction:'top',className:'bubble',offset:[8,-26]}).openTooltip();
+  S.flags.push({m:f,t:Date.now()});
+}
+function pruneFlags(){ S.flags=S.flags.filter(f=>{ if(Date.now()-f.t>BUBBLE_MS){ map.removeLayer(f.m); return false; } return true; }); }
+function focusOn(lat,lng){ closeAllSheets(); setFollow(false); map.setView([lat,lng],Math.max(map.getZoom(),19)); }
+function renderChat(){
+  const log=$('chatLog');
+  if(!S.messages.length){ log.innerHTML='<p class="note">まだメッセージはありません。下の定型文をタップすると、すぐに送れます。</p>'; return; }
+  log.innerHTML=S.messages.map(m=>{ const mine=m.user_id===S.user.id;
+    return `<div class="msg ${mine?'mine':''}"><div class="who">${mine?'':esc(nameOf(m.user_id))+'・'}${hhmm(m.created_at)}</div><div class="body">${esc(m.body)}</div>${m.lat!=null?`<div><button class="loc" data-lat="${m.lat}" data-lng="${m.lng}">📍 地図で見る</button></div>`:''}</div>`; }).join('');
+  log.scrollTop=log.scrollHeight;
+}
+$('chatLog').onclick=e=>{ const b=e.target.closest('[data-lat]'); if(b) focusOn(+b.dataset.lat,+b.dataset.lng); };
+function renderBadge(){ $('badge').hidden=!S.unread; $('badge').textContent=S.unread>9?'9+':S.unread; }
+function openChat(){ closeAllSheets(); S.unread=0; renderBadge(); renderChat(); $('chatWrap').hidden=false; const l=$('chatLog'); l.scrollTop=l.scrollHeight; }
+$('chatBtn').onclick=openChat; $('chatClose').onclick=()=>{ $('chatWrap').hidden=true; };
+$('chatWrap').onclick=e=>{ if(e.target===$('chatWrap')) $('chatWrap').hidden=true; };
+
+/* ---------- stats ---------- */
+function renderStats(){
+  const all=[...S.records.values()], done=all.filter(r=>r.kind==='done');
+  const sum=a=>a.reduce((s,r)=>s+(r.count||0),0);
+  const todayAll=sum(done.filter(r=>isToday(r.created_at)));
+  const todayMine=sum(done.filter(r=>isToday(r.created_at)&&S.user&&r.user_id===S.user.id));
+  $('today').innerHTML=`今日の配布（あなた／全体）<br><b>${todayMine}</b> 枚 ／ ${todayAll} 枚`;
+  $('sTodaySheets').textContent=todayAll; $('sAllSheets').textContent=sum(done); $('sHouses').textContent=done.length; $('sRefuse').textContent=all.length-done.length;
+  const by=new Map();
+  for(const r of done){ const o=by.get(r.user_id)||{today:0,all:0,n:0}; o.all+=r.count; o.n++; if(isToday(r.created_at)) o.today+=r.count; by.set(r.user_id,o); }
+  $('statRows').innerHTML=[...by].sort((a,b)=>b[1].all-a[1].all).map(([id,o])=>`<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${colorOf(id)};margin-right:6px"></span>${esc(nameOf(id))}</td><td>${o.today}</td><td>${o.all}</td><td>${o.n}</td></tr>`).join('')||'<tr><td colspan="4" class="note">まだ記録がありません</td></tr>';
+}
+$('csvBtn').onclick=()=>{
+  const head=['日時','メンバー','種類','枚数','メモ','緯度','経度'];
+  const rows=[...S.records.values()].sort((a,b)=>a.created_at.localeCompare(b.created_at)).map(r=>[new Date(r.created_at).toLocaleString('ja-JP'),nameOf(r.user_id),r.kind==='refuse'?'お断り':'配った',r.count,r.note||'',r.lat.toFixed(7),r.lng.toFixed(7)]);
+  const csv='﻿'+[head,...rows].map(x=>x.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download=`配布記録_${S.group.name}_${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+};
+
+/* ---------- menu / invite ---------- */
+function inviteUrl(){ return location.origin+location.pathname+'?join='+S.group.invite_code; }
+function inviteText(){ return `ポスティングの配布マップ「${S.group.name}」に参加してください。\n${inviteUrl()}\n（招待コード：${S.group.invite_code}）`; }
+function showTab(t){ for(const b of document.querySelectorAll('[data-tab]')) b.setAttribute('aria-selected',b.dataset.tab===t); for(const s of ['invite','stats','me']) $('tab-'+s).hidden=s!==t; }
+for(const b of document.querySelectorAll('[data-tab]')) b.onclick=()=>showTab(b.dataset.tab);
+async function openMenu(tab){
+  closeAllSheets();
+  $('invGrp').textContent=S.group.name; $('invCode').textContent=S.group.invite_code;
+  $('lineBtn').href='https://line.me/R/share?text='+encodeURIComponent(inviteText());
+  $('shareBtn').hidden=!navigator.share; $('qrBox').hidden=true;
+  $('meName').textContent=S.myName; $('meEmail').textContent=S.user.email||''; $('shareLocIn').checked=S.shareLoc;
+  renderStats(); showTab(tab||'invite'); $('menuWrap').hidden=false;
+  const {data}=await S.sb.from('members').select('user_id,role').eq('group_id',S.group.id);
+  $('memberList').innerHTML=(data||[]).map(m=>{ const on=m.user_id===S.user.id||(S.peers.has(m.user_id)&&Date.now()-S.peers.get(m.user_id).t<PEER_STALE_MS);
+    return `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${colorOf(m.user_id)};margin-right:6px"></span>${esc(nameOf(m.user_id))}${m.role==='owner'?'（作成者）':''}</td><td class="note">${on?'● オンライン':'オフライン'}</td></tr>`; }).join('');
+}
+$('menuBtn').onclick=()=>openMenu('invite');
+$('menuClose').onclick=()=>{ $('menuWrap').hidden=true; };
+$('menuWrap').onclick=e=>{ if(e.target===$('menuWrap')) $('menuWrap').hidden=true; };
+$('shareBtn').onclick=async()=>{ try{ await navigator.share({title:'配布マップへの招待',text:inviteText()}); }catch(e){} };
+$('copyBtn').onclick=async()=>{ try{ await navigator.clipboard.writeText(inviteText()); toast('招待メッセージをコピーしました'); }catch(e){ toast('コピーできませんでした。招待コードを伝えてください',{kind:'warn'}); } };
+$('qrBtn').onclick=()=>{ $('qr').innerHTML=''; if(window.QRCode) new QRCode($('qr'),{text:inviteUrl(),width:220,height:220,correctLevel:QRCode.CorrectLevel.L}); $('qrBox').hidden=false; };
+$('shareLocIn').onchange=e=>{ S.shareLoc=e.target.checked; store.set('pm_shareLoc',S.shareLoc); trackMe(true); toast(S.shareLoc?'現在地の表示をオンにしました':'現在地の表示をオフにしました'); };
+let leaveArmed=false;
+$('leaveBtn').onclick=async()=>{
+  if(!leaveArmed){ leaveArmed=true; $('leaveBtn').textContent='もう一度押すと抜けます'; setTimeout(()=>{leaveArmed=false;$('leaveBtn').textContent='このグループを抜ける';},4000); return; }
+  const {error}=await S.sb.from('members').delete().eq('group_id',S.group.id).eq('user_id',S.user.id);
+  if(error){ toast('抜けられませんでした：'+jpErr(error),{kind:'warn'}); return; }
+  store.del('pm_lastGroup'); $('menuWrap').hidden=true; await leaveGroup(); showGroups();
+};
+$('logoutBtn').onclick=logout; $('gLogout').onclick=logout;
+async function logout(){ await leaveGroup(); await S.sb.auth.signOut(); store.del('pm_lastGroup'); location.reload(); }
+function closeAllSheets(){ if(!$('recWrap').hidden) closeRec(); $('chatWrap').hidden=true; $('menuWrap').hidden=true; }
+
+/* ---------- auth ---------- */
+let authMode='signup';
+function setAuthMode(m){ authMode=m; $('tSignup').setAttribute('aria-selected',m==='signup'); $('tLogin').setAttribute('aria-selected',m==='login');
+  $('nameRow').hidden=m!=='signup'; $('authSubmit').textContent=m==='signup'?'アカウントを作成':'ログイン'; $('aPass').autocomplete=m==='signup'?'new-password':'current-password'; $('authErr').textContent=''; }
+$('tSignup').onclick=()=>setAuthMode('signup'); $('tLogin').onclick=()=>setAuthMode('login');
+function showAuth(){ const j=store.get('pm_join',null); $('joinNotice').hidden=!j; if(j) $('joinCodeTxt').textContent=j; $('authScreen').hidden=false; }
+$('authForm').addEventListener('submit',async e=>{
+  e.preventDefault(); const err=$('authErr'); err.textContent='';
+  const email=$('aEmail').value.trim(), pass=$('aPass').value, name=$('aName').value.trim();
+  if(authMode==='signup' && !name){ err.textContent='表示名を入れてください。'; return; }
+  if(!email||!pass){ err.textContent='メールアドレスとパスワードを入れてください。'; return; }
+  $('authSubmit').disabled=true;
+  try{
+    if(authMode==='signup'){
+      const {data,error}=await S.sb.auth.signUp({email,password:pass,options:{data:{display_name:name},emailRedirectTo:location.origin+location.pathname}});
+      if(error) throw error;
+      if(!data.session){ err.style.color='var(--done)'; err.textContent='確認メールを送りました。メールのリンクを開いてから「ログイン」してください。'; setAuthMode('login'); return; }
+    } else {
+      const {error}=await S.sb.auth.signInWithPassword({email,password:pass}); if(error) throw error;
+    }
+  }catch(ex){ err.style.color=''; err.textContent=jpErr(ex); }
+  finally{ $('authSubmit').disabled=false; }
+});
+
+/* ---------- groups ---------- */
+async function loadGroups(){ const {data,error}=await S.sb.from('groups').select('*').order('created_at'); if(error) throw error; S.groups=data||[]; }
+function showGroups(){
+  $('gsName').textContent=S.myName; $('gErr').textContent=''; $('gBack').hidden=!S.group;
+  $('gList').innerHTML=S.groups.length?S.groups.map(g=>`<button class="gitem" data-g="${g.id}">${esc(g.name)}<small>開く ›</small></button>`).join(''):'<p class="note" style="margin:0">まだグループがありません。新しく作るか、招待コードで参加してください。</p>';
+  $('groupScreen').hidden=false;
+}
+$('gList').onclick=e=>{ const b=e.target.closest('[data-g]'); if(b) enterGroup(S.groups.find(g=>g.id===b.dataset.g)); };
+$('grpBtn').onclick=async()=>{ closeAllSheets(); try{ await loadGroups(); }catch(e){} showGroups(); };
+$('gBack').onclick=()=>{ $('groupScreen').hidden=true; };
+$('createBtn').onclick=async()=>{
+  const n=$('newGrp').value.trim(); if(!n){ $('gErr').textContent='グループ名を入れてください。'; return; }
+  $('createBtn').disabled=true; $('gErr').textContent='作成中…';
+  try{
+    const {data,error}=await S.sb.rpc('create_group',{p_name:n});
+    if(error) throw error;
+    let g=Array.isArray(data)?data[0]:data;
+    $('newGrp').value='';
+    try{ await loadGroups(); }catch(e){ throw new Error('グループ一覧を読み込めません：'+jpErr(e)); }
+    if(!g||!g.id) g=S.groups[S.groups.length-1];
+    if(!g) throw new Error('グループは作成されましたが、一覧に表示できません（アクセス権の設定を確認してください）');
+    $('gErr').textContent='';
+    await enterGroup(g);
+    setTimeout(()=>openMenu('invite'),600);
+  }catch(e){ $('gErr').textContent='エラー：'+jpErr(e); showGroups(); }
+  finally{ $('createBtn').disabled=false; }
+};
+$('joinBtn').onclick=()=>joinByCode($('joinCode').value);
+async function joinByCode(code){
+  code=(code||'').trim(); if(!code){ $('gErr').textContent='招待コードを入れてください。'; return; }
+  store.del('pm_join');
+  try{
+    const {data,error}=await S.sb.rpc('join_group',{p_code:code});
+    if(error) throw error;
+    let g=Array.isArray(data)?data[0]:data;
+    try{ await loadGroups(); }catch(e){ throw new Error('グループ一覧を読み込めません：'+jpErr(e)); }
+    if(!g||!g.id) g=S.groups.find(x=>x.invite_code===code.toLowerCase());
+    if(!g) throw new Error('参加しましたが、グループを読み込めませんでした');
+    await enterGroup(g); toast(`「${g.name}」に参加しました`);
+  }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); }
+}
+
+async function leaveGroup(){
+  if(S.chan){ try{ await S.sb.removeChannel(S.chan); }catch(e){} S.chan=null; }
+  if(S.pchan){ try{ await S.pchan.untrack(); await S.sb.removeChannel(S.pchan); }catch(e){} S.pchan=null; }
+  S.pReady=false; S.peers.clear(); bubbles.clear(); clearMap(); S.records.clear(); S.messages=[];
+}
+async function enterGroup(g){
+  if(!g) return;
+  await leaveGroup();
+  S.group=g; store.set('pm_lastGroup',g.id);
+  $('grpName').textContent=g.name; $('groupScreen').hidden=true; $('authScreen').hidden=true;
+  const gid=g.id;
+  // 未送信分
+  S.pending=[]; for(const r of store.get(pendKey(),[])){ S.records.set(r.id,r); S.pending.push(r.id); }
+  const [mem,rec,msg]=await Promise.all([
+    S.sb.from('members').select('user_id').eq('group_id',gid),
+    S.sb.from('records').select('*').eq('group_id',gid),
+    S.sb.from('messages').select('*').eq('group_id',gid).order('created_at',{ascending:false}).limit(100)
+  ]);
+  if(mem.error||rec.error||msg.error){ toast('読み込みに失敗しました：'+jpErr(mem.error||rec.error||msg.error),{kind:'warn',ms:7000}); }
+  const ids=(mem.data||[]).map(m=>m.user_id);
+  if(ids.length){ const {data}=await S.sb.from('profiles').select('id,display_name').in('id',ids); for(const p of data||[]) S.names.set(p.id,p.display_name); }
+  for(const r of rec.data||[]) if(!S.pending.includes(r.id)) S.records.set(r.id,r);
+  for(const r of S.records.values()) drawRec(r);
+  S.messages=(msg.data||[]).reverse(); renderChat(); renderStats(); flush();
+  if(S.records.size && firstFix){ const b=L.latLngBounds([...S.records.values()].map(r=>[r.lat,r.lng])); map.fitBounds(b,{maxZoom:18,padding:[30,30]}); }
+
+  S.chan=S.sb.channel('db-'+gid)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'records',filter:'group_id=eq.'+gid},p=>onRec(p.new))
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'records',filter:'group_id=eq.'+gid},p=>onRec(p.new))
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'records'},p=>{ const id=p.old&&p.old.id; if(id&&S.records.has(id)&&!S.pending.includes(id)){ S.records.delete(id); undrawRec(id); renderStats(); } })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'group_id=eq.'+gid},async p=>{ await ensureName(p.new.user_id); addMsg(p.new,p.new.user_id===S.user.id); })
+    .subscribe();
+  S.pchan=S.sb.channel('live-'+gid,{config:{presence:{key:S.user.id}}})
+    .on('presence',{event:'sync'},syncPeers)
+    .subscribe(st=>{ if(st==='SUBSCRIBED'){ S.pReady=true; trackMe(true); updateChip(); } else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED'){ S.pReady=false; updateChip(); } });
+}
+async function ensureName(id){ if(S.names.has(id)) return; const {data}=await S.sb.from('profiles').select('id,display_name').eq('id',id).maybeSingle(); if(data) S.names.set(data.id,data.display_name); }
+async function onRec(r){
+  if(!r||S.pending.includes(r.id)) return;
+  const isNew=!S.records.has(r.id);
+  await ensureName(r.user_id);
+  S.records.set(r.id,r); drawRec(r); renderStats();
+  if(isNew && r.user_id!==S.user.id){ buzz(25); toast(`${nameOf(r.user_id)}さんが${r.kind==='refuse'?'お断りの家':r.count+'枚'}を記録`); }
+}
+
+/* ---------- boot ---------- */
+async function afterLogin(user){
+  S.user=user;
+  const {data}=await S.sb.from('profiles').select('display_name').eq('id',user.id).maybeSingle();
+  S.myName=(data&&data.display_name)||(user.user_metadata&&user.user_metadata.display_name)||(user.email||'').split('@')[0];
+  S.names.set(user.id,S.myName);
+  $('authScreen').hidden=true;
+  startGps(); keepAwake();
+  const join=store.get('pm_join',null);
+  if(join){ await joinByCode(join); return; }
+  try{ await loadGroups(); }catch(e){ toast('グループを読み込めません：'+jpErr(e),{kind:'warn',ms:8000}); }
+  const last=store.get('pm_lastGroup',null), g=S.groups.find(x=>x.id===last);
+  if(g) enterGroup(g); else if(S.groups.length===1) enterGroup(S.groups[0]); else showGroups();
+}
+function layout(){
+  const top=document.querySelector('.top').offsetHeight, bar=document.querySelector('.bar').offsetHeight;
+  $('fab').style.top=(top+12)+'px'; $('hint').style.top=(top+12)+'px'; $('toasts').style.bottom=(bar+12)+'px';
+}
+window.addEventListener('resize',layout); layout();
+setTimeout(()=>{ $('hint').hidden=true; },12000);
+
+window.addEventListener('unhandledrejection',e=>{
+  const msg='エラー：'+jpErr(e.reason);
+  if(!$('groupScreen').hidden) $('gErr').textContent=msg; else if(!$('authScreen').hidden) $('authErr').textContent=msg; else toast(msg,{kind:'warn',ms:9000});
+});
+(async function init(){
+  const q=new URLSearchParams(location.search);
+  if(q.get('join')){ store.set('pm_join',q.get('join')); history.replaceState(null,'',location.pathname); }
+  if(!/^https:\/\//.test(SUPABASE_URL) || SUPABASE_ANON_KEY.length<20 || !window.supabase){ $('cfgScreen').hidden=false; return; }
+  S.sb=window.supabase.createClient(SUPABASE_URL.trim(),SUPABASE_ANON_KEY.trim());
+  let booted=false;
+  S.sb.auth.onAuthStateChange((ev,session)=>{
+    if(session&&session.user&&!booted){ booted=true; setTimeout(()=>afterLogin(session.user),0); }
+  });
+  const {data}=await S.sb.auth.getSession();
+  if(!data.session) showAuth();
+})();
+</script>
+</body>
+</html>
