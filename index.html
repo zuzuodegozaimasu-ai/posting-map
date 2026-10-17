@@ -170,7 +170,7 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
   padding:10px max(12px,env(safe-area-inset-right,0px)) 10px max(12px,env(safe-area-inset-left,0px))}
 .drawbar span{flex:1;min-width:0}
 .drawbar button{border:0;border-radius:10px;padding:8px 14px;font-weight:800;background:rgba(0,0,0,.14);color:inherit}
-#map.drawing{cursor:crosshair}
+#map.drawing,#map.drawing *{cursor:crosshair;touch-action:none!important}
 .alabel{background:rgba(255,255,255,.92);color:#122420;border:2px solid currentColor;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:800;white-space:nowrap;transform:translate(-50%,-50%);display:inline-block;box-shadow:0 1px 4px rgba(0,0,0,.25)}
 .alabel b{color:#122420}
 /* ===== トップページ =====
@@ -916,6 +916,8 @@ function finishStroke(e){
   $('areaName').value=''; $('areaWho').textContent=S.myName; $('areaWrap').hidden=false;
 }
 mapEl.addEventListener('pointerup',finishStroke,true);
+mapEl.addEventListener('touchmove',e=>{ if(drawing) e.preventDefault(); },{passive:false,capture:true});
+mapEl.addEventListener('touchstart',e=>{ if(drawing&&e.touches.length===1) e.preventDefault(); },{passive:false,capture:true});
 mapEl.addEventListener('pointercancel',finishStroke,true);
 $('areaBtn').onclick=()=>{ if(drawing){ endDraw(); clearDraft(); } else startDraw(); };
 $('drawCancel').onclick=()=>{ endDraw(); clearDraft(); };
