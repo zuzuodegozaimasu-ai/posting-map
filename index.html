@@ -152,6 +152,13 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 .leaflet-popup-content{font-family:var(--font);font-size:13px;line-height:1.6}
 .leaflet-popup-content button{margin-top:6px;margin-right:4px;border:1px solid #14322b;color:#14322b;background:#fff;border-radius:8px;padding:6px 12px;font-weight:700}
 .leaflet-control-attribution{font-size:10px}
+.drawbar{position:absolute;left:0;right:0;z-index:1200;display:flex;align-items:center;gap:10px;background:var(--warn);color:#1a1300;font-weight:800;font-size:14px;
+  padding:10px max(12px,env(safe-area-inset-right,0px)) 10px max(12px,env(safe-area-inset-left,0px))}
+.drawbar span{flex:1;min-width:0}
+.drawbar button{border:0;border-radius:10px;padding:8px 14px;font-weight:800;background:rgba(0,0,0,.14);color:inherit}
+#map.drawing{cursor:crosshair}
+.alabel{background:rgba(255,255,255,.92);color:#122420;border:2px solid currentColor;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:800;white-space:nowrap;transform:translate(-50%,-50%);display:inline-block;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.alabel b{color:#122420}
 </style>
 </head>
 <body>
@@ -168,6 +175,7 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 <div class="fab" id="fab">
   <button id="locBtn" class="on" aria-label="現在地を追う">現在地</button>
   <button id="layerBtn" aria-label="地図の種類を切り替え">写真</button>
+  <button id="areaBtn" aria-label="配布範囲を描く">範囲</button>
 </div>
 <nav class="bar">
   <div class="today" id="today">今日の配布<br><b>0</b> 枚</div>
@@ -198,6 +206,23 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
       <button id="recDelete" class="btn danger" hidden>削除</button>
       <button id="recCancel" class="btn">やめる</button>
       <button id="recSave" class="btn primary wide">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="drawbar" class="drawbar" hidden><span id="drawMsg">指で地図をなぞって、配る範囲を囲んでください</span><button id="drawCancel">やめる</button></div>
+
+<!-- ===== area sheet ===== -->
+<div id="areaWrap" class="sheet-wrap clear" hidden>
+  <div class="sheet" role="dialog" aria-modal="false" aria-labelledby="areaTitle">
+    <h2 id="areaTitle">配布範囲を保存</h2>
+    <label for="areaName">範囲の名前</label>
+    <input id="areaName" type="text" maxlength="40" placeholder="例：西尾1丁目 北側">
+    <p class="note">担当者はあなた（<b id="areaWho"></b>）になります。範囲はグループ全員の地図に表示されます。</p>
+    <div class="row">
+      <button id="areaRedo" class="btn">描き直す</button>
+      <button id="areaCancel" class="btn">やめる</button>
+      <button id="areaSave" class="btn primary wide">保存</button>
     </div>
   </div>
 </div>
@@ -343,7 +368,7 @@ const store = {
 
 const S = {
   sb:null, user:null, myName:'', groups:[], group:null,
-  names:new Map(), records:new Map(), messages:[], pending:[],
+  names:new Map(), records:new Map(), areas:new Map(), myRole:'member', messages:[], pending:[],
   peers:new Map(), peerMarkers:new Map(), flags:[],
   pos:null, follow:true, chan:null, pchan:null, pReady:false, lastTrack:0,
   unread:0, shareLoc: store.get('pm_shareLoc', true)
@@ -413,14 +438,14 @@ function drawRec(r){
   else { m.setLatLng([r.lat,r.lng]); m.setIcon(recIcon(r)); }
 }
 function undrawRec(id){ const m=recMarkers.get(id); if(m){ map.removeLayer(m); recMarkers.delete(id); } }
-function clearMap(){ for(const id of [...recMarkers.keys()]) undrawRec(id); for(const m of S.peerMarkers.values()) map.removeLayer(m); S.peerMarkers.clear(); for(const f of S.flags) map.removeLayer(f.m); S.flags=[]; }
+function clearMap(){ for(const id of [...recMarkers.keys()]) undrawRec(id); for(const m of S.peerMarkers.values()) map.removeLayer(m); S.peerMarkers.clear(); for(const f of S.flags) map.removeLayer(f.m); S.flags=[]; for(const id of [...areaLayers.keys()]) undrawArea(id); S.areas.clear(); }
 
 let lastPopupClose=0;
 map.on('popupclose',()=>{ lastPopupClose=Date.now(); });
 map.on('popupopen',e=>{ const b=e.popup.getElement().querySelector('[data-edit]'); if(b) b.onclick=()=>{ map.closePopup(); openRec(null,S.records.get(b.dataset.edit)); }; });
 map.on('dragstart',()=>setFollow(false));
 map.on('click',e=>{
-  if(!S.group) return;
+  if(!S.group||drawing||Date.now()-drawEndedAt<500) return;
   if(Date.now()-lastPopupClose<400) return;
   if(!$('recWrap').hidden){ moveGhost(e.latlng); return; }
   openRec(e.latlng,null);
@@ -618,8 +643,89 @@ function openChat(){ closeAllSheets(); S.unread=0; renderBadge(); renderChat(); 
 $('chatBtn').onclick=openChat; $('chatClose').onclick=()=>{ $('chatWrap').hidden=true; };
 $('chatWrap').onclick=e=>{ if(e.target===$('chatWrap')) $('chatWrap').hidden=true; };
 
+/* ---------- 配布範囲（手書き） ---------- */
+const areaLayers=new Map(); // id -> {poly,label}
+let drawing=false, drawEndedAt=0, drawPts=[], drawLine=null, drawPointer=null, areaDraft=null;
+function inPoly(pt,poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [yi,xi]=poly[i],[yj,xj]=poly[j];
+  if(((yi>pt.lat)!==(yj>pt.lat)) && (pt.lng < (xj-xi)*(pt.lat-yi)/(yj-yi)+xi)) c=!c; } return c; }
+function areaStats(a){ let n=0,sheets=0,refuse=0; for(const r of S.records.values()){ if(!inPoly(r,a.points)) continue; if(r.kind==='refuse') refuse++; else { n++; sheets+=r.count||0; } } return {n,sheets,refuse}; }
+function areaLabelIcon(a){ const st=areaStats(a), col=colorOf(a.user_id);
+  return L.divIcon({className:'',iconSize:[0,0],html:`<div class="alabel" style="color:${col}"><b>${esc(a.name||'範囲')}</b>・${esc(nameOf(a.user_id))}　${st.n}件/${st.sheets}枚</div>`}); }
+function drawArea(a){
+  undrawArea(a.id);
+  const col=colorOf(a.user_id);
+  const poly=L.polygon(a.points,{color:col,weight:3,dashArray:'8 6',fillColor:col,fillOpacity:.10,interactive:false}).addTo(map);
+  const c=poly.getBounds().getCenter();
+  const label=L.marker(c,{icon:areaLabelIcon(a),zIndexOffset:-500}).addTo(map);
+  label.bindPopup(()=>{ const x=S.areas.get(a.id)||a, st=areaStats(x), canDel=x.user_id===S.user.id||S.myRole==='owner';
+    return `<b>${esc(x.name||'範囲')}</b><br>担当：${esc(nameOf(x.user_id))}<br>この範囲の記録：配った ${st.n}件（${st.sheets}枚）・お断り ${st.refuse}件`+(canDel?`<br><button data-delarea="${x.id}">この範囲を消す</button>`:''); });
+  areaLayers.set(a.id,{poly,label});
+}
+function undrawArea(id){ const l=areaLayers.get(id); if(l){ map.removeLayer(l.poly); map.removeLayer(l.label); areaLayers.delete(id); } }
+function refreshAreaLabels(){ for(const [id,l] of areaLayers){ const a=S.areas.get(id); if(a) l.label.setIcon(areaLabelIcon(a)); } }
+map.on('popupopen',e=>{ const b=e.popup.getElement().querySelector('[data-delarea]'); if(b) b.onclick=async()=>{ map.closePopup(); const id=b.dataset.delarea;
+  const {error}=await S.sb.from('areas').delete().eq('id',id);
+  if(error){ toast('消せませんでした：'+jpErr(error),{kind:'warn'}); return; }
+  S.areas.delete(id); undrawArea(id); toast('範囲を消しました'); }; });
+
+function startDraw(){
+  if(!S.group) return;
+  closeAllSheets(); drawing=true; drawPts=[]; setFollow(false);
+  map.dragging.disable(); map.touchZoom.disable(); map.doubleClickZoom.disable(); map.scrollWheelZoom.disable(); map.boxZoom.disable();
+  $('map').classList.add('drawing'); $('drawbar').hidden=false; $('drawMsg').textContent='指で地図をなぞって、配る範囲を囲んでください';
+  $('areaBtn').classList.add('on'); layout();
+}
+function endDraw(){
+  drawing=false; drawEndedAt=Date.now(); drawPointer=null;
+  map.dragging.enable(); map.touchZoom.enable(); map.doubleClickZoom.enable(); map.scrollWheelZoom.enable(); map.boxZoom.enable();
+  $('map').classList.remove('drawing'); $('drawbar').hidden=true; $('areaBtn').classList.remove('on');
+}
+function clearDraft(){ if(drawLine){ map.removeLayer(drawLine); drawLine=null; } drawPts=[]; areaDraft=null; }
+const mapEl=$('map');
+mapEl.addEventListener('pointerdown',e=>{
+  if(!drawing) return; e.preventDefault(); e.stopPropagation();
+  drawPointer=e.pointerId; clearDraft();
+  const ll=map.mouseEventToLatLng(e); drawPts=[ll];
+  drawLine=L.polyline(drawPts,{color:'#c98a00',weight:4,interactive:false}).addTo(map);
+  try{ mapEl.setPointerCapture(e.pointerId); }catch(x){}
+},true);
+mapEl.addEventListener('pointermove',e=>{
+  if(!drawing||e.pointerId!==drawPointer) return; e.preventDefault(); e.stopPropagation();
+  const ll=map.mouseEventToLatLng(e), last=drawPts[drawPts.length-1];
+  const a=map.latLngToContainerPoint(last), b=map.latLngToContainerPoint(ll);
+  if(Math.hypot(a.x-b.x,a.y-b.y)<6) return;
+  if(drawPts.length<800){ drawPts.push(ll); drawLine.setLatLngs(drawPts); }
+},true);
+function finishStroke(e){
+  if(!drawing||e.pointerId!==drawPointer) return; e.preventDefault(); e.stopPropagation();
+  drawPointer=null;
+  if(drawPts.length<6){ clearDraft(); $('drawMsg').textContent='線が短すぎます。もう一度、範囲をぐるっと囲んでください'; return; }
+  const pts=drawPts.map(p=>[Math.round(p.lat*1e6)/1e6,Math.round(p.lng*1e6)/1e6]);
+  map.removeLayer(drawLine);
+  drawLine=L.polygon(pts,{color:'#c98a00',weight:3,fillOpacity:.15,interactive:false}).addTo(map);
+  areaDraft=pts; endDraw();
+  $('areaName').value=''; $('areaWho').textContent=S.myName; $('areaWrap').hidden=false;
+}
+mapEl.addEventListener('pointerup',finishStroke,true);
+mapEl.addEventListener('pointercancel',finishStroke,true);
+$('areaBtn').onclick=()=>{ if(drawing){ endDraw(); clearDraft(); } else startDraw(); };
+$('drawCancel').onclick=()=>{ endDraw(); clearDraft(); };
+$('areaCancel').onclick=()=>{ $('areaWrap').hidden=true; clearDraft(); };
+$('areaRedo').onclick=()=>{ $('areaWrap').hidden=true; clearDraft(); startDraw(); };
+$('areaSave').onclick=async()=>{
+  if(!areaDraft) return;
+  const a={id:uid(),group_id:S.group.id,user_id:S.user.id,name:$('areaName').value.trim()||null,points:areaDraft,created_at:new Date().toISOString()};
+  $('areaSave').disabled=true;
+  const {error}=await S.sb.from('areas').insert(a);
+  $('areaSave').disabled=false;
+  if(error){ toast('保存できませんでした：'+jpErr(error),{kind:'warn',ms:7000}); return; }
+  $('areaWrap').hidden=true; clearDraft();
+  S.areas.set(a.id,a); drawArea(a); toast('配布範囲を保存しました');
+};
+
 /* ---------- stats ---------- */
 function renderStats(){
+  refreshAreaLabels();
   const all=[...S.records.values()], done=all.filter(r=>r.kind==='done');
   const sum=a=>a.reduce((s,r)=>s+(r.count||0),0);
   const todayAll=sum(done.filter(r=>isToday(r.created_at)));
@@ -670,7 +776,7 @@ $('leaveBtn').onclick=async()=>{
 };
 $('logoutBtn').onclick=logout; $('gLogout').onclick=logout;
 async function logout(){ await leaveGroup(); await S.sb.auth.signOut(); store.del('pm_lastGroup'); location.reload(); }
-function closeAllSheets(){ if(!$('recWrap').hidden) closeRec(); $('chatWrap').hidden=true; $('menuWrap').hidden=true; }
+function closeAllSheets(){ if(!$('recWrap').hidden) closeRec(); if(!$('areaWrap').hidden){ $('areaWrap').hidden=true; clearDraft(); } $('chatWrap').hidden=true; $('menuWrap').hidden=true; }
 
 /* ---------- auth ---------- */
 let authMode='signup';
@@ -751,16 +857,20 @@ async function enterGroup(g){
   const gid=g.id;
   // 未送信分
   S.pending=[]; for(const r of store.get(pendKey(),[])){ S.records.set(r.id,r); S.pending.push(r.id); }
-  const [mem,rec,msg]=await Promise.all([
-    S.sb.from('members').select('user_id').eq('group_id',gid),
+  const [mem,rec,msg,ar]=await Promise.all([
+    S.sb.from('members').select('user_id,role').eq('group_id',gid),
     S.sb.from('records').select('*').eq('group_id',gid),
-    S.sb.from('messages').select('*').eq('group_id',gid).order('created_at',{ascending:false}).limit(100)
+    S.sb.from('messages').select('*').eq('group_id',gid).order('created_at',{ascending:false}).limit(100),
+    S.sb.from('areas').select('*').eq('group_id',gid)
   ]);
+  if(ar.error) toast('配布範囲を読み込めません：'+jpErr(ar.error),{kind:'warn',ms:7000});
+  const meRow=(mem.data||[]).find(m=>m.user_id===S.user.id); S.myRole=meRow?meRow.role:'member';
   if(mem.error||rec.error||msg.error){ toast('読み込みに失敗しました：'+jpErr(mem.error||rec.error||msg.error),{kind:'warn',ms:7000}); }
   const ids=(mem.data||[]).map(m=>m.user_id);
   if(ids.length){ const {data}=await S.sb.from('profiles').select('id,display_name').in('id',ids); for(const p of data||[]) S.names.set(p.id,p.display_name); }
   for(const r of rec.data||[]) if(!S.pending.includes(r.id)) S.records.set(r.id,r);
   for(const r of S.records.values()) drawRec(r);
+  for(const a of ar.data||[]){ S.areas.set(a.id,a); drawArea(a); }
   S.messages=(msg.data||[]).reverse(); renderChat(); renderStats(); flush();
   if(S.records.size && firstFix){ const b=L.latLngBounds([...S.records.values()].map(r=>[r.lat,r.lng])); map.fitBounds(b,{maxZoom:18,padding:[30,30]}); }
 
@@ -768,6 +878,8 @@ async function enterGroup(g){
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'records',filter:'group_id=eq.'+gid},p=>onRec(p.new))
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'records',filter:'group_id=eq.'+gid},p=>onRec(p.new))
     .on('postgres_changes',{event:'DELETE',schema:'public',table:'records'},p=>{ const id=p.old&&p.old.id; if(id&&S.records.has(id)&&!S.pending.includes(id)){ S.records.delete(id); undrawRec(id); renderStats(); } })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'areas',filter:'group_id=eq.'+gid},async p=>{ const a=p.new; if(S.areas.has(a.id)) return; await ensureName(a.user_id); S.areas.set(a.id,a); drawArea(a); if(a.user_id!==S.user.id) toast(`${nameOf(a.user_id)}さんが範囲「${a.name||'無題'}」を追加`); })
+    .on('postgres_changes',{event:'DELETE',schema:'public',table:'areas'},p=>{ const id=p.old&&p.old.id; if(id&&S.areas.has(id)){ S.areas.delete(id); undrawArea(id); } })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'group_id=eq.'+gid},async p=>{ await ensureName(p.new.user_id); addMsg(p.new,p.new.user_id===S.user.id); })
     .subscribe();
   S.pchan=S.sb.channel('live-'+gid,{config:{presence:{key:S.user.id}}})
@@ -799,7 +911,7 @@ async function afterLogin(user){
 }
 function layout(){
   const top=document.querySelector('.top').offsetHeight, bar=document.querySelector('.bar').offsetHeight;
-  $('fab').style.top=(top+12)+'px'; $('hint').style.top=(top+12)+'px'; $('toasts').style.bottom=(bar+12)+'px';
+  $('fab').style.top=(top+12)+'px'; $('drawbar').style.top=top+'px'; $('hint').style.top=(top+12)+'px'; $('toasts').style.bottom=(bar+12)+'px';
 }
 window.addEventListener('resize',layout); layout();
 setTimeout(()=>{ $('hint').hidden=true; },12000);

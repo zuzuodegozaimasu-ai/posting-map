@@ -4,6 +4,7 @@
 -- ※第1版の records テーブルは削除して作り直します（試作データは消えます）
 -- =============================================================
 
+drop table if exists public.areas cascade;
 drop table if exists public.records cascade;
 drop table if exists public.messages cascade;
 drop table if exists public.members cascade;
@@ -128,8 +129,31 @@ create policy "records delete own" on public.records for delete to authenticated
 create policy "messages read" on public.messages for select to authenticated using (public.is_member(group_id));
 create policy "messages send" on public.messages for insert to authenticated with check (public.is_member(group_id) and user_id = auth.uid());
 
+-- ---------- 配布範囲（手書きで囲んだエリア） ----------
+create table if not exists public.areas (
+  id         uuid primary key default gen_random_uuid(),
+  group_id   uuid not null references public.groups on delete cascade,
+  user_id    uuid not null default auth.uid() references auth.users on delete cascade,  -- 担当者
+  name       text check (char_length(name) <= 40),
+  points     jsonb not null check (jsonb_typeof(points) = 'array' and jsonb_array_length(points) between 3 and 1000),
+  created_at timestamptz not null default now()
+);
+create index if not exists areas_group_idx on public.areas (group_id);
+alter table public.areas enable row level security;
+drop policy if exists "areas read" on public.areas;
+drop policy if exists "areas add" on public.areas;
+drop policy if exists "areas delete" on public.areas;
+create policy "areas read" on public.areas for select to authenticated using (public.is_member(group_id));
+create policy "areas add" on public.areas for insert to authenticated with check (public.is_member(group_id) and user_id = auth.uid());
+-- 消せるのは、描いた本人かグループ作成者
+create policy "areas delete" on public.areas for delete to authenticated using (
+  user_id = auth.uid()
+  or exists (select 1 from public.members m where m.group_id = areas.group_id and m.user_id = auth.uid() and m.role = 'owner')
+);
+grant select, insert, delete on public.areas to authenticated;
+
 -- ---------- リアルタイム配信 ----------
-alter publication supabase_realtime add table public.records, public.messages;
+alter publication supabase_realtime add table public.records, public.messages, public.areas;
 
 -- ---------- アプリ（ログイン済みユーザー）からテーブルを使えるようにする ----------
 -- ※実際に見られる範囲は上のRLSで制限されます
