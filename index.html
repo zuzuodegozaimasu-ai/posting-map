@@ -113,7 +113,16 @@ input[type=text],input[type=email],input[type=password],input[type=number]{width
 .chatlog{display:flex;flex-direction:column;gap:10px;max-height:42vh;overflow:auto;padding:4px 2px;margin-bottom:10px}
 .msg{max-width:85%;align-self:flex-start}
 .msg.mine{align-self:flex-end;text-align:right}
-.msg .who{font-size:11px;color:var(--muted);margin-bottom:2px}
+.msg .who{font-size:11px;color:var(--muted);margin-bottom:3px;display:flex;align-items:center;gap:5px}
+.msg.mine .who{justify-content:flex-end}
+.av{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:900;flex:none;line-height:1;vertical-align:middle}
+.avpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:6px}
+.avpick button{height:44px;border-radius:12px;border:2px solid var(--line);background:var(--bg);font-size:22px;padding:0}
+.avpick button[aria-pressed=true]{border-color:var(--ink);background:var(--surface)}
+.colpick{display:flex;flex-wrap:wrap;gap:8px}
+.colpick button{width:34px;height:34px;border-radius:50%;border:3px solid transparent;padding:0}
+.colpick button[aria-pressed=true]{border-color:var(--ink);box-shadow:0 0 0 2px var(--surface) inset}
+.profprev{display:flex;align-items:center;gap:12px;margin:6px 0 4px}
 .msg .body{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:8px 12px;text-align:left;white-space:pre-wrap;word-break:break-word}
 .msg.mine .body{background:var(--chat);color:#fff;border-color:var(--chat)}
 .msg .loc{font-size:12px;color:var(--chat);background:none;border:0;padding:2px 0;font-weight:700}
@@ -371,7 +380,7 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
     <div class="tabs" role="tablist">
       <button role="tab" data-tab="invite" aria-selected="true">メンバー招待</button>
       <button role="tab" data-tab="stats" aria-selected="false">集計</button>
-      <button role="tab" data-tab="me" aria-selected="false">設定</button>
+      <button role="tab" data-tab="me" aria-selected="false">プロフィール</button>
     </div>
     <section id="tab-invite">
       <h2 id="menuTitle">「<span id="invGrp"></span>」に招待</h2>
@@ -405,7 +414,16 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
       </div>
     </section>
     <section id="tab-me" hidden>
-      <h2>設定</h2>
+      <h2>プロフィール</h2>
+      <div class="profprev"><span id="profPrev"></span><span class="note">地図・チャット・メンバー一覧に、このアイコンと名前が出ます。</span></div>
+      <label for="profName">表示名</label>
+      <input id="profName" type="text" maxlength="20" autocomplete="nickname">
+      <label>アイコン</label>
+      <div class="avpick" id="avPick"></div>
+      <label>色</label>
+      <div class="colpick" id="colPick"></div>
+      <div class="row"><button id="profSave" class="btn primary wide">プロフィールを保存</button></div>
+      <h3>設定</h3>
       <div class="toggle"><span>自分の現在地をメンバーに表示する</span><input id="shareLocIn" type="checkbox" checked></div>
       <p class="note">オフにすると、地図上のあなたのアイコンが他のメンバーから見えなくなります。アプリを閉じている間は、オンでも位置は送られません。</p>
       <div class="row"><button class="btn primary wide" data-openplan="me">プランと支払い</button></div>
@@ -640,7 +658,7 @@ const store = {
 
 const S = {
   sb:null, user:null, myName:'', groups:[], group:null,
-  names:new Map(), records:new Map(), areas:new Map(), myRole:'member', plan:{pro:false,team:false,free_groups:0}, messages:[], pending:[],
+  names:new Map(), avatars:new Map(), records:new Map(), areas:new Map(), myRole:'member', plan:{pro:false,team:false,free_groups:0}, messages:[], pending:[],
   peers:new Map(), peerMarkers:new Map(), flags:[],
   pos:null, follow:true, chan:null, pchan:null, pReady:false, lastTrack:0,
   unread:0, shareLoc: store.get('pm_shareLoc', true)
@@ -650,6 +668,12 @@ const S = {
 function dist(a,b){ const R=6371000,t=Math.PI/180,dLat=(b.lat-a.lat)*t,dLng=(b.lng-a.lng)*t;
   const x=Math.sin(dLat/2)**2+Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
 const PALETTE=['#1f6fd1','#d1491f','#7a3cc9','#0e8f8f','#b8327a','#5a7d12','#a86a00','#3b5bdb'];
+const AVATARS=['','🐱','🐶','🐻','🐼','🦊','🐸','🐧','🐰','🐯','🐨','🐥','🐙','🦁','🐵','🦉','🐳','🌻','⭐','🚲'];
+const PERSON_COLORS=['#1f6fd1','#d1491f','#7a3cc9','#0e8f8f','#b8327a','#5a7d12','#a86a00','#3b5bdb','#c92a2a','#2b8a3e'];
+function setProfile(p){ if(!p||!p.id) return; if(p.display_name) S.names.set(p.id,p.display_name); S.avatars.set(p.id,{avatar:p.avatar||'',color:p.color||''}); }
+function personColor(id){ const a=S.avatars.get(id); return (a&&a.color)||colorOf(id); }
+function personMark(id,name){ const a=S.avatars.get(id); return (a&&a.avatar)?a.avatar:esc(((name||nameOf(id))||'?').trim().slice(0,1)); }
+function avatarHtml(id,size){ return `<span class="av" style="width:${size}px;height:${size}px;font-size:${Math.round(size*.55)}px;background:${personColor(id)}">${personMark(id)}</span>`; }
 function colorOf(id){ let h=0; for(const c of String(id||'?')) h=(h*31+c.charCodeAt(0))>>>0; return PALETTE[h%PALETTE.length]; }
 function nameOf(id){ return S.names.get(id) || 'メンバー'; }
 function ago(iso){ const s=Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
@@ -697,7 +721,7 @@ function recIcon(r){
   const pend=S.pending.includes(r.id);
   const txt=r.kind==='refuse'?'×':(r.count>99?'99+':r.count);
   return L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],
-    html:`<div class="pin ${r.kind==='refuse'?'refuse':''} ${pend?'pending':''}" style="background:${colorOf(r.user_id)}">${txt}</div>`});
+    html:`<div class="pin ${r.kind==='refuse'?'refuse':''} ${pend?'pending':''}" style="background:${personColor(r.user_id)}">${txt}</div>`});
 }
 function recPopup(r){
   const mine=S.user && r.user_id===S.user.id;
@@ -829,14 +853,15 @@ function trackMe(force){
   if(!force && Date.now()-S.lastTrack<5000) return;
   S.lastTrack=Date.now();
   const p=(S.shareLoc&&S.pos)?{lat:S.pos.lat,lng:S.pos.lng,acc:Math.round(S.pos.acc)}:{lat:null,lng:null};
-  S.pchan.track(Object.assign({name:S.myName,t:Date.now()},p)).catch(()=>{});
+  S.pchan.track(Object.assign({name:S.myName,av:(S.avatars.get(S.user.id)||{}).avatar||'',co:(S.avatars.get(S.user.id)||{}).color||'',t:Date.now()},p)).catch(()=>{});
 }
 function syncPeers(){
   const st=S.pchan.presenceState(), seen=new Set();
   for(const [key,arr] of Object.entries(st)){
     if(key===S.user.id||!arr.length) continue;
     const p=arr[arr.length-1]; seen.add(key);
-    if(p.name && !S.names.has(key)) S.names.set(key,p.name);
+    if(p.name) S.names.set(key,p.name);
+    if(p.av!==undefined) S.avatars.set(key,{avatar:p.av||'',color:p.co||''});
     S.peers.set(key,{name:p.name||nameOf(key),lat:p.lat,lng:p.lng,t:p.t||Date.now()});
   }
   for(const k of [...S.peers.keys()]) if(!seen.has(k)) S.peers.delete(k);
@@ -845,7 +870,7 @@ function syncPeers(){
 function peerIcon(id,p){
   const stale=Date.now()-p.t>PEER_STALE_MS;
   return L.divIcon({className:'',iconSize:[80,48],iconAnchor:[40,16],
-    html:`<div class="peer ${stale?'stale':''}"><div class="dot" style="background:${colorOf(id)}">${esc((p.name||'?').slice(0,1))}</div><div class="nm">${esc(p.name)}</div></div>`});
+    html:`<div class="peer ${stale?'stale':''}"><div class="dot" style="background:${personColor(id)}">${personMark(id,p.name)}</div><div class="nm">${esc(p.name)}</div></div>`});
 }
 function drawPeers(){
   for(const [id,m] of S.peerMarkers){ const p=S.peers.get(id); if(!p||p.lat==null){ map.removeLayer(m); S.peerMarkers.delete(id); } }
@@ -907,7 +932,7 @@ function renderChat(){
   const log=$('chatLog');
   if(!S.messages.length){ log.innerHTML='<p class="note">まだメッセージはありません。下の定型文をタップすると、すぐに送れます。</p>'; return; }
   log.innerHTML=S.messages.map(m=>{ const mine=m.user_id===S.user.id;
-    return `<div class="msg ${mine?'mine':''}"><div class="who">${mine?'':esc(nameOf(m.user_id))+'・'}${hhmm(m.created_at)}</div><div class="body">${esc(m.body)}</div>${m.lat!=null?`<div><button class="loc" data-lat="${m.lat}" data-lng="${m.lng}">📍 地図で見る</button></div>`:''}</div>`; }).join('');
+    return `<div class="msg ${mine?'mine':''}"><div class="who">${mine?'':avatarHtml(m.user_id,20)+' '+esc(nameOf(m.user_id))+'・'}${hhmm(m.created_at)}</div><div class="body">${esc(m.body)}</div>${m.lat!=null?`<div><button class="loc" data-lat="${m.lat}" data-lng="${m.lng}">📍 地図で見る</button></div>`:''}</div>`; }).join('');
   log.scrollTop=log.scrollHeight;
 }
 $('chatLog').onclick=e=>{ const b=e.target.closest('[data-lat]'); if(b) focusOn(+b.dataset.lat,+b.dataset.lng); };
@@ -1069,7 +1094,7 @@ function renderStats(){
   $('sTodaySheets').textContent=todayAll; $('sAllSheets').textContent=sum(done); $('sHouses').textContent=done.length; $('sRefuse').textContent=all.length-done.length;
   const by=new Map();
   for(const r of done){ const o=by.get(r.user_id)||{today:0,all:0,n:0}; o.all+=r.count; o.n++; if(isToday(r.created_at)) o.today+=r.count; by.set(r.user_id,o); }
-  $('statRows').innerHTML=[...by].sort((a,b)=>b[1].all-a[1].all).map(([id,o])=>`<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${colorOf(id)};margin-right:6px"></span>${esc(nameOf(id))}</td><td>${o.today}</td><td>${o.all}</td><td>${o.n}</td></tr>`).join('')||'<tr><td colspan="4" class="note">まだ記録がありません</td></tr>';
+  $('statRows').innerHTML=[...by].sort((a,b)=>b[1].all-a[1].all).map(([id,o])=>`<tr><td>${avatarHtml(id,22)} ${esc(nameOf(id))}</td><td>${o.today}</td><td>${o.all}</td><td>${o.n}</td></tr>`).join('')||'<tr><td colspan="4" class="note">まだ記録がありません</td></tr>';
 }
 $('csvBtn').onclick=()=>{
   if(!paid()){ openPlan('stats'); return; }
@@ -1090,11 +1115,11 @@ async function openMenu(tab){
   $('invGrp').textContent=S.group.name; $('invCode').textContent=S.group.invite_code;
   $('lineBtn').href='https://line.me/R/share?text='+encodeURIComponent(inviteText());
   $('shareBtn').hidden=!navigator.share; $('qrBox').hidden=true;
-  $('meName').textContent=S.myName; $('meEmail').textContent=S.user.email||''; $('shareLocIn').checked=S.shareLoc;
+  $('meName').textContent=S.myName; $('meEmail').textContent=S.user.email||''; openProfile(); $('shareLocIn').checked=S.shareLoc;
   renderStats(); showTab(tab||'invite'); $('menuWrap').hidden=false;
   const {data}=await S.sb.from('members').select('user_id,role').eq('group_id',S.group.id);
   $('memberList').innerHTML=(data||[]).map(m=>{ const on=m.user_id===S.user.id||(S.peers.has(m.user_id)&&Date.now()-S.peers.get(m.user_id).t<PEER_STALE_MS);
-    return `<tr><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${colorOf(m.user_id)};margin-right:6px"></span>${esc(nameOf(m.user_id))}${m.role==='owner'?'（作成者）':''}</td><td class="note">${on?'● オンライン':'オフライン'}</td></tr>`; }).join('');
+    return `<tr><td>${avatarHtml(m.user_id,22)} ${esc(nameOf(m.user_id))}${m.role==='owner'?'（作成者）':''}</td><td class="note">${on?'● オンライン':'オフライン'}</td></tr>`; }).join('');
 }
 $('menuBtn').onclick=()=>openMenu('invite');
 $('menuClose').onclick=()=>{ $('menuWrap').hidden=true; };
@@ -1118,6 +1143,36 @@ $('leaveBtn').onclick=async()=>{
 $('logoutBtn').onclick=logout; $('gLogout').onclick=logout;
 async function logout(){ await leaveGroup(); await S.sb.auth.signOut(); store.del('pm_lastGroup'); location.reload(); }
 function closeAllSheets(){ if(!$('recWrap').hidden) closeRec(); if(!$('areaWrap').hidden){ $('areaWrap').hidden=true; clearDraft(); } $('chatWrap').hidden=true; $('menuWrap').hidden=true; }
+
+/* ---------- profile ---------- */
+let prof={avatar:'',color:''};
+function renderProfPrev(){
+  $('profPrev').innerHTML=`<span class="av" style="width:48px;height:48px;font-size:26px;background:${prof.color||colorOf(S.user.id)}">${prof.avatar||esc(($('profName').value||S.myName||'?').trim().slice(0,1))}</span>`;
+  for(const b of $('avPick').children) b.setAttribute('aria-pressed',b.dataset.av===prof.avatar);
+  for(const b of $('colPick').children) b.setAttribute('aria-pressed',b.dataset.co===prof.color);
+}
+function openProfile(){
+  const a=S.avatars.get(S.user.id)||{}; prof={avatar:a.avatar||'',color:a.color||''};
+  $('profName').value=S.myName;
+  $('avPick').innerHTML=AVATARS.map(x=>`<button type="button" data-av="${x}" aria-label="${x?'アイコン '+x:'名前の頭文字'}">${x||'<span style="font-size:13px;font-weight:800">文字</span>'}</button>`).join('');
+  $('colPick').innerHTML=['',...PERSON_COLORS].map(c=>`<button type="button" data-co="${c}" aria-label="${c?'色 '+c:'おまかせの色'}" style="background:${c||colorOf(S.user.id)}">${c?'':'<span style="color:#fff;font-size:10px;font-weight:800">自動</span>'}</button>`).join('');
+  renderProfPrev();
+}
+$('avPick').onclick=e=>{ const b=e.target.closest('[data-av]'); if(b){ prof.avatar=b.dataset.av; renderProfPrev(); } };
+$('colPick').onclick=e=>{ const b=e.target.closest('[data-co]'); if(b){ prof.color=b.dataset.co; renderProfPrev(); } };
+$('profName').addEventListener('input',renderProfPrev);
+$('profSave').onclick=async()=>{
+  const name=$('profName').value.trim();
+  if(!name){ toast('表示名を入れてください',{kind:'warn'}); return; }
+  $('profSave').disabled=true;
+  const {error}=await S.sb.from('profiles').update({display_name:name,avatar:prof.avatar||null,color:prof.color||null}).eq('id',S.user.id);
+  $('profSave').disabled=false;
+  if(error){ toast('保存できませんでした：'+jpErr(error),{kind:'warn',ms:7000}); return; }
+  S.myName=name; setProfile({id:S.user.id,display_name:name,avatar:prof.avatar,color:prof.color});
+  $('meName').textContent=name; trackMe(true);
+  for(const r of S.records.values()) if(r.user_id===S.user.id) drawRec(r);
+  renderChat(); renderStats(); toast('プロフィールを保存しました');
+};
 
 /* ---------- auth ---------- */
 let authMode='signup';
@@ -1232,7 +1287,7 @@ async function enterGroup(g){
   const meRow=(mem.data||[]).find(m=>m.user_id===S.user.id); S.myRole=meRow?meRow.role:'member';
   if(mem.error||rec.error||msg.error){ toast('読み込みに失敗しました：'+jpErr(mem.error||rec.error||msg.error),{kind:'warn',ms:7000}); }
   const ids=(mem.data||[]).map(m=>m.user_id);
-  if(ids.length){ const {data}=await S.sb.from('profiles').select('id,display_name').in('id',ids); for(const p of data||[]) S.names.set(p.id,p.display_name); }
+  if(ids.length){ const {data}=await S.sb.from('profiles').select('id,display_name,avatar,color').in('id',ids); for(const p of data||[]) setProfile(p); }
   for(const r of rec.data||[]) if(!S.pending.includes(r.id)) S.records.set(r.id,r);
   for(const r of S.records.values()) drawRec(r);
   for(const a of ar.data||[]){ S.areas.set(a.id,a); drawArea(a); }
@@ -1252,7 +1307,7 @@ async function enterGroup(g){
     .on('presence',{event:'sync'},syncPeers)
     .subscribe(st=>{ if(st==='SUBSCRIBED'){ S.pReady=true; trackMe(true); updateChip(); } else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED'){ S.pReady=false; updateChip(); } });
 }
-async function ensureName(id){ if(S.names.has(id)) return; const {data}=await S.sb.from('profiles').select('id,display_name').eq('id',id).maybeSingle(); if(data) S.names.set(data.id,data.display_name); }
+async function ensureName(id){ if(S.names.has(id)) return; const {data}=await S.sb.from('profiles').select('id,display_name,avatar,color').eq('id',id).maybeSingle(); if(data) setProfile(data); }
 async function onRec(r){
   if(!r||S.pending.includes(r.id)) return;
   const isNew=!S.records.has(r.id);
@@ -1264,9 +1319,9 @@ async function onRec(r){
 /* ---------- boot ---------- */
 async function afterLogin(user){
   S.user=user;
-  const {data}=await S.sb.from('profiles').select('display_name').eq('id',user.id).maybeSingle();
+  const {data}=await S.sb.from('profiles').select('id,display_name,avatar,color').eq('id',user.id).maybeSingle();
   S.myName=(data&&data.display_name)||(user.user_metadata&&user.user_metadata.display_name)||(user.email||'').split('@')[0];
-  S.names.set(user.id,S.myName);
+  if(data) setProfile(data); S.names.set(user.id,S.myName);
   loadPlan();
   $('authScreen').hidden=true; $('authWrap').hidden=true;
   startGps(); keepAwake();
