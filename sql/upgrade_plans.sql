@@ -115,4 +115,14 @@ drop policy if exists "records read" on public.records;
 create policy "records read" on public.records for select to authenticated
   using (public.is_member(group_id) and (public.has_paid(group_id) or created_at > now() - interval '30 days'));
 
+-- ---------- サーバー（決済プログラム）用の権限 ----------
+-- 新しいSupabaseプロジェクトでは、管理用の役割にもテーブル権限を明示する必要がある
+grant usage on schema public to service_role;
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+grant execute on all functions in schema public to service_role;
+alter default privileges in schema public grant all on tables to service_role;
+alter default privileges in schema public grant all on sequences to service_role;
+alter default privileges in schema public grant execute on functions to service_role;
+
 notify pgrst, 'reload schema';
