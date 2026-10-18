@@ -576,12 +576,33 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
       </div>
       <label for="aEmail">メールアドレス</label>
       <input id="aEmail" type="email" autocomplete="email" inputmode="email">
-      <label for="aPass">パスワード（6文字以上）</label>
-      <input id="aPass" type="password" autocomplete="current-password">
+      <div id="passRow">
+        <label for="aPass">パスワード（6文字以上）</label>
+        <input id="aPass" type="password" autocomplete="current-password">
+      </div>
+      <p class="note" id="forgotNote" hidden>登録したメールアドレスに、パスワードを設定し直すためのリンクを送ります。</p>
       <div class="err" id="authErr"></div>
       <div class="row"><button id="authSubmit" class="btn primary wide" type="submit">アカウントを作成</button></div>
+      <div class="row" id="forgotRow" hidden><button type="button" class="btn wide" id="forgotBtn">パスワードを忘れた方はこちら</button></div>
+      <div class="row" id="backRow" hidden><button type="button" class="btn wide" id="backLoginBtn">‹ ログインに戻る</button></div>
     </form>
     <div class="row"><button class="btn wide" id="authClose" type="button">閉じる</button></div>
+  </div>
+</div>
+
+<!-- ===== new password sheet ===== -->
+<div id="resetWrap" class="sheet-wrap" hidden style="z-index:3300">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="resetTitle">
+    <h2 id="resetTitle">新しいパスワードを設定</h2>
+    <p class="note">メールのリンクから開きました。新しいパスワードを入れて保存すると、そのままログインします。</p>
+    <form id="resetForm" novalidate>
+      <label for="rPass">新しいパスワード（6文字以上）</label>
+      <input id="rPass" type="password" autocomplete="new-password">
+      <label for="rPass2">もう一度入力</label>
+      <input id="rPass2" type="password" autocomplete="new-password">
+      <div class="err" id="resetErr"></div>
+      <div class="row"><button id="resetSubmit" class="btn primary wide" type="submit">パスワードを保存</button></div>
+    </form>
   </div>
 </div>
 
@@ -690,6 +711,8 @@ function jpErr(e){
   if(/already registered|already been registered/i.test(m)) return 'このメールアドレスは登録済みです。「ログイン」から入ってください。';
   if(/at least 6/i.test(m)) return 'パスワードは6文字以上にしてください。';
   if(/Email not confirmed/i.test(m)) return 'メールの確認がまだです。届いたメールのリンクを開いてから、もう一度ログインしてください。';
+  if(/same.*password|different from the old/i.test(m)) return '前と同じパスワードは使えません。別のパスワードにしてください。';
+  if(/expired|invalid.*(link|token)|otp_expired/i.test(m)) return 'リンクの有効期限が切れています。もう一度、再設定メールを送ってください。';
   if(/rate limit/i.test(m)) return '短時間に操作が多すぎます。少し待ってからもう一度試してください。';
   if(/valid email|invalid format/i.test(m)) return 'メールアドレスの形式を確認してください。';
   if(/Failed to fetch|NetworkError/i.test(m)) return '通信できません。電波の良い場所でもう一度試してください。';
@@ -1176,9 +1199,15 @@ $('profSave').onclick=async()=>{
 
 /* ---------- auth ---------- */
 let authMode='signup';
-function setAuthMode(m){ authMode=m; $('tSignup').setAttribute('aria-selected',m==='signup'); $('tLogin').setAttribute('aria-selected',m==='login');
-  $('nameRow').hidden=m!=='signup'; $('authSubmit').textContent=m==='signup'?'アカウントを作成':'ログイン'; $('authTitle').textContent=m==='signup'?'アカウント作成':'ログイン'; $('aPass').autocomplete=m==='signup'?'new-password':'current-password'; $('authErr').textContent=''; }
+function setAuthMode(m){ authMode=m;
+  $('tSignup').setAttribute('aria-selected',m==='signup'); $('tLogin').setAttribute('aria-selected',m!=='signup');
+  $('nameRow').hidden=m!=='signup'; $('passRow').hidden=m==='forgot'; $('forgotNote').hidden=m!=='forgot';
+  $('forgotRow').hidden=m!=='login'; $('backRow').hidden=m!=='forgot';
+  $('authSubmit').textContent=m==='signup'?'アカウントを作成':m==='login'?'ログイン':'再設定メールを送る';
+  $('authTitle').textContent=m==='signup'?'アカウント作成':m==='login'?'ログイン':'パスワードの再設定';
+  $('aPass').autocomplete=m==='signup'?'new-password':'current-password'; $('authErr').textContent=''; $('authErr').style.color=''; }
 $('tSignup').onclick=()=>setAuthMode('signup'); $('tLogin').onclick=()=>setAuthMode('login');
+$('forgotBtn').onclick=()=>setAuthMode('forgot'); $('backLoginBtn').onclick=()=>setAuthMode('login');
 function openAuth(mode){ setAuthMode(mode); const j=store.get('pm_join',null); $('joinNotice').hidden=!j; if(j) $('joinCodeTxt').textContent=j; $('authWrap').hidden=false; setTimeout(()=>{ try{ (mode==='signup'?$('aName'):$('aEmail')).focus(); }catch(e){} },50); }
 function showAuth(){ $('authScreen').hidden=false; if(store.get('pm_join',null)) openAuth('signup'); }
 document.addEventListener('click',e=>{ const b=e.target.closest('[data-auth]'); if(b) openAuth(b.dataset.auth); });
@@ -1187,6 +1216,15 @@ $('authWrap').onclick=e=>{ if(e.target===$('authWrap')) $('authWrap').hidden=tru
 $('authForm').addEventListener('submit',async e=>{
   e.preventDefault(); const err=$('authErr'); err.textContent='';
   const email=$('aEmail').value.trim(), pass=$('aPass').value, name=$('aName').value.trim();
+  if(authMode==='forgot'){
+    if(!email){ err.textContent='メールアドレスを入れてください。'; return; }
+    $('authSubmit').disabled=true;
+    const {error}=await S.sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+    $('authSubmit').disabled=false;
+    if(error){ err.textContent=jpErr(error); return; }
+    err.style.color='var(--done)'; err.textContent='再設定のメールを送りました。メールのリンクを開くと、新しいパスワードを設定できます。届かない場合は、迷惑メールフォルダも確認してください。';
+    return;
+  }
   if(authMode==='signup' && !name){ err.textContent='表示名を入れてください。'; return; }
   if(!email||!pass){ err.textContent='メールアドレスとパスワードを入れてください。'; return; }
   $('authSubmit').disabled=true;
@@ -1200,6 +1238,19 @@ $('authForm').addEventListener('submit',async e=>{
     }
   }catch(ex){ err.style.color=''; err.textContent=jpErr(ex); }
   finally{ $('authSubmit').disabled=false; }
+});
+
+$('resetForm').addEventListener('submit',async e=>{
+  e.preventDefault(); const err=$('resetErr'); err.textContent='';
+  const a=$('rPass').value, b=$('rPass2').value;
+  if(a.length<6){ err.textContent='パスワードは6文字以上にしてください。'; return; }
+  if(a!==b){ err.textContent='2つのパスワードが一致しません。'; return; }
+  $('resetSubmit').disabled=true;
+  const {data,error}=await S.sb.auth.updateUser({password:a});
+  $('resetSubmit').disabled=false;
+  if(error){ err.textContent=jpErr(error); return; }
+  $('resetWrap').hidden=true; S.recovering=false; toast('新しいパスワードを保存しました');
+  if(!S.booted){ S.booted=true; afterLogin(data.user); }
 });
 
 /* ---------- groups ---------- */
@@ -1348,13 +1399,22 @@ window.addEventListener('unhandledrejection',e=>{
   if(q.get('join')){ store.set('pm_join',q.get('join')); history.replaceState(null,'',location.pathname); }
   const checkout=q.get('checkout'); if(checkout){ store.set('pm_checkout',checkout); history.replaceState(null,'',location.pathname); }
   if(!/^https:\/\//.test(SUPABASE_URL) || SUPABASE_ANON_KEY.length<20 || !window.supabase){ $('cfgScreen').hidden=false; return; }
-  S.sb=window.supabase.createClient(SUPABASE_URL.trim(),SUPABASE_ANON_KEY.trim());
-  let booted=false;
+  const hash=new URLSearchParams(location.hash.slice(1));
+  S.recovering=hash.get('type')==='recovery';
+  const linkErr=hash.get('error_code')||hash.get('error');
+  S.sb=window.supabase.createClient(SUPABASE_URL.trim(),SUPABASE_ANON_KEY.trim(),{auth:{flowType:'implicit',detectSessionInUrl:true,persistSession:true}});
+  S.booted=false;
   S.sb.auth.onAuthStateChange((ev,session)=>{
-    if(session&&session.user&&!booted){ booted=true; setTimeout(()=>afterLogin(session.user),0); }
+    if(ev==='PASSWORD_RECOVERY') S.recovering=true;
+    if(S.recovering&&session){ $('authScreen').hidden=false; $('authWrap').hidden=true; $('resetWrap').hidden=false; return; }
+    if(session&&session.user&&!S.booted){ S.booted=true; setTimeout(()=>afterLogin(session.user),0); }
   });
   const {data}=await S.sb.auth.getSession();
-  if(!data.session) showAuth();
+  if(location.hash) history.replaceState(null,'',location.pathname+location.search);
+  if(!data.session){
+    showAuth();
+    if(linkErr){ openAuth('forgot'); $('authErr').textContent=/expired/i.test(hash.get('error_code')||'')?'リンクの有効期限が切れています。もう一度、再設定メールを送ってください。':'リンクを開けませんでした：'+(hash.get('error_description')||linkErr); }
+  }
 })();
 </script>
 </body>
