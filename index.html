@@ -84,7 +84,7 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(-
 .sheet h2{font-size:18px;margin:2px 0 10px}
 .sheet h3{font-size:13px;margin:18px 0 8px;color:var(--muted);letter-spacing:.06em}
 .tabs{display:flex;gap:6px;margin-bottom:10px}
-.tabs button{flex:1;border:1px solid var(--line);background:transparent;border-radius:10px;padding:9px;font-weight:700}
+.tabs button{flex:1;border:1px solid var(--line);background:transparent;border-radius:10px;padding:9px 4px;font-weight:700;white-space:nowrap;font-size:14px;min-width:0}
 .tabs button[aria-selected=true]{background:var(--brand);color:#fff;border-color:var(--brand)}
 label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
 input[type=text],input[type=email],input[type=password],input[type=number],input[type=date]{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
@@ -106,6 +106,8 @@ input[type=text],input[type=email],input[type=password],input[type=number],input
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips button{border:1px solid var(--line);background:transparent;border-radius:999px;padding:7px 12px;font-weight:700;font-size:13px}
 .chips button[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.rectabs{margin:-2px 0 10px}
+.rtdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#e67700;margin-left:6px;vertical-align:2px}
 .nextbox{margin-top:12px;border:1px solid var(--line);border-radius:12px;padding:8px 12px}
 .nextbox summary{font-weight:800;font-size:14px;cursor:pointer;padding:4px 0}
 .pin.later{background:#e67700!important;font-size:14px}
@@ -348,6 +350,11 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 <div id="recWrap" class="sheet-wrap clear" hidden>
   <div class="sheet" role="dialog" aria-modal="false" aria-labelledby="recTitle">
     <h2 id="recTitle">この家を記録</h2>
+    <div class="tabs rectabs" role="tablist">
+      <button role="tab" type="button" id="rtRec" aria-selected="true">記録</button>
+      <button role="tab" type="button" id="rtPlan" aria-selected="false">予定<span id="rtPlanDot" class="rtdot" hidden></span></button>
+    </div>
+    <div id="recPane">
     <div id="recNear" class="near" hidden></div>
     <div class="seg4" id="kindSeg"></div>
     <div id="countBox">
@@ -365,14 +372,19 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
     </div>
     <label for="noteIn">メモ（任意）</label>
     <input id="noteIn" type="text" maxlength="100" placeholder="例：〇〇マンション前／ポストが裏側">
-    <details class="nextbox" id="nextBox">
-      <summary>次の予定・TODO（任意）</summary>
-      <label for="nextDate">次に行く日</label>
-      <input id="nextDate" type="date">
-      <label for="todoIn">やること</label>
-      <input id="todoIn" type="text" maxlength="200" placeholder="例：〇〇のポスターを貼ってもらう約束">
-      <p class="note">予定はグループのメンバーにも見えます。</p>
-    </details>
+    <p class="note" id="laterHint" hidden>「予定」タブで、次に行く日とやることを入れられます。</p>
+    </div>
+    <div id="planPane" hidden>
+      <div id="planLock" class="lock" hidden>次の予定・TODOの管理は、<b>有料プラン</b>の機能です。<br><button type="button" class="btn primary" data-openplan="todo">プランを見る</button></div>
+      <div id="planForm">
+        <label for="nextDate">次に行く日</label>
+        <input id="nextDate" type="date">
+        <label for="todoIn">やること</label>
+        <input id="todoIn" type="text" maxlength="200" placeholder="例：〇〇のポスターを貼ってもらう約束">
+        <div class="quick" id="dateQuick"><button type="button" data-d="1">明日</button><button type="button" data-d="3">3日後</button><button type="button" data-d="7">1週間後</button><button type="button" data-d="0">日付を消す</button></div>
+        <p class="note">予定はグループのメンバーにも見えます。☰ →「予定」タブに日付順で並びます。</p>
+      </div>
+    </div>
     <div class="row">
       <button id="recDelete" class="btn danger" hidden>削除</button>
       <button id="recCancel" class="btn">やめる</button>
@@ -441,6 +453,7 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
     </section>
     <section id="tab-todo" hidden>
       <h2>次の予定・TODO</h2>
+      <div id="todoLock" class="lock" hidden>次の予定・TODOの管理は、有料プランの機能です。<br><button class="btn primary" data-openplan="todo">プランを見る</button></div>
       <div class="toggle"><span>自分の予定だけ表示</span><input id="todoMine" type="checkbox" checked></div>
       <div id="todoList"></div>
       <p class="note">家を記録するときの「次の予定・TODO」に入れたものが、日付の近い順に並びます。</p>
@@ -502,7 +515,7 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
       </div>
       <div class="plan" id="pPersonal">
         <h4>個人プラン<span>500円<small>／月（税込）</small></span></h4>
-        <ul><li>グループにいくつでも参加・作成</li><li>チャットで自由に文字を送れる</li><li>メンバー別の集計、CSV出力</li><li>記録を期限なく表示</li></ul>
+        <ul><li>グループにいくつでも参加・作成</li><li>チャットで自由に文字を送れる</li><li>次の予定・TODOの管理</li><li>メンバー別の集計、CSV出力</li><li>記録を期限なく表示</li></ul>
         <button class="btn primary" id="buyPersonal">個人プランにする</button>
       </div>
       <div class="plan" id="pTeam">
@@ -597,7 +610,7 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
     <p class="lp-p">ふだん使いは無料のまま。自由入力のチャットや複数グループが必要になったら、有料プランを選べます。</p>
     <div class="lp-price">
       <div class="lp-plan"><h3>無料</h3><p class="lp-yen">0円</p><ul><li>グループ1つ</li><li>家の記録・お断りの家・配布範囲</li><li>メンバーの現在地</li><li>定型文での呼び出し</li><li>直近30日の記録</li></ul></div>
-      <div class="lp-plan lp-plan-hi"><h3>個人プラン</h3><p class="lp-yen">500円<small>／月</small></p><ul><li>グループ無制限</li><li>自由に文字を打てるチャット</li><li>集計・CSV出力</li><li>記録を期限なく表示</li></ul></div>
+      <div class="lp-plan lp-plan-hi"><h3>個人プラン</h3><p class="lp-yen">500円<small>／月</small></p><ul><li>グループ無制限</li><li>自由に文字を打てるチャット</li><li>次の予定・TODO</li><li>集計・CSV出力</li><li>記録を期限なく表示</li></ul></div>
       <div class="lp-plan"><h3>チームプラン</h3><p class="lp-yen">1,500円<small>／月</small></p><ul><li>グループのメンバー全員が個人プランと同じ機能</li><li>業者・塾・団体向け</li></ul></div>
     </div>
     <p class="lp-small">料金はすべて税込です。有料プランはいつでも解約できます。</p>
@@ -876,7 +889,13 @@ $('kindSeg').innerHTML=KIND_ORDER.map(k=>`<button type="button" data-k="${k}">${
 $('kindSeg').onclick=e=>{ const b=e.target.closest('[data-k]'); if(b) setKind(b.dataset.k); };
 function setKind(k){ for(const b of $('kindSeg').children){ const on=b.dataset.k===k; b.setAttribute('aria-pressed',on); b.style.background=on?KINDS[b.dataset.k].color:''; b.style.borderColor=on?KINDS[b.dataset.k].color:''; }
   $('countBox').hidden=!KINDS[k].sheets; $('audBox').hidden=k==='refuse'; recCtx.kind=k;
-  if(k==='later'){ $('nextBox').open=true; } }
+  $('laterHint').hidden=k!=='later'; }
+function setRecTab(t){ $('rtRec').setAttribute('aria-selected',t==='rec'); $('rtPlan').setAttribute('aria-selected',t==='plan'); $('recPane').hidden=t!=='rec'; $('planPane').hidden=t!=='plan';
+  if(t==='plan'){ $('planLock').hidden=paid(); $('planForm').hidden=!paid(); } }
+$('rtRec').onclick=()=>setRecTab('rec'); $('rtPlan').onclick=()=>setRecTab('plan');
+function updatePlanDot(){ $('rtPlanDot').hidden=!($('nextDate').value||$('todoIn').value.trim()); }
+$('nextDate').addEventListener('input',updatePlanDot); $('todoIn').addEventListener('input',updatePlanDot);
+$('dateQuick').onclick=e=>{ const b=e.target.closest('[data-d]'); if(!b) return; const n=+b.dataset.d; if(!n){ $('nextDate').value=''; } else { const d=new Date(); d.setDate(d.getDate()+n); $('nextDate').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); } updatePlanDot(); };
 $('audChips').innerHTML=AUDIENCE.map(a=>`<button type="button" data-a="${a}" aria-pressed="false">${a}</button>`).join('');
 $('audChips').onclick=e=>{ const b=e.target.closest('[data-a]'); if(b){ b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true'); buzz(10); } };
 function getAudience(){ return [...$('audChips').children].filter(b=>b.getAttribute('aria-pressed')==='true').map(b=>b.dataset.a); }
@@ -895,7 +914,7 @@ function openRec(latlng,rec){
   $('countIn').value=rec?Math.max(1,rec.count):1;
   $('noteIn').value=rec?(rec.note||''):'';
   const aud=rec&&rec.audience||[]; for(const b of $('audChips').children) b.setAttribute('aria-pressed',aud.includes(b.dataset.a));
-  $('nextDate').value=rec&&rec.next_date||''; $('todoIn').value=rec&&rec.todo||''; $('nextBox').open=!!(rec&&(rec.next_date||rec.todo));
+  $('nextDate').value=rec&&rec.next_date||''; $('todoIn').value=rec&&rec.todo||''; updatePlanDot(); setRecTab('rec');
   $('recDelete').hidden=!rec;
   setKind(recCtx.kind);
   if(!rec){ ghost=L.marker(latlng,{icon:L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],html:'<div class="pin ghost"></div>'}),interactive:false}).addTo(map); }
@@ -912,7 +931,8 @@ $('recSave').onclick=()=>{
   const k=recCtx.kind;
   const count=KINDS[k].sheets?Math.min(9999,Math.max(1,parseInt($('countIn').value)||1)):0;
   const note=$('noteIn').value.trim()||null;
-  const extra={audience:k==='refuse'?[]:getAudience(),next_date:$('nextDate').value||null,todo:$('todoIn').value.trim()||null};
+  const keepPlan=!paid()&&recCtx.rec;
+  const extra={audience:k==='refuse'?[]:getAudience(),next_date:paid()?($('nextDate').value||null):(keepPlan?recCtx.rec.next_date||null:null),todo:paid()?($('todoIn').value.trim()||null):(keepPlan?recCtx.rec.todo||null:null)};
   if(recCtx.rec){
     const changedTodo=(recCtx.rec.next_date||null)!==extra.next_date||(recCtx.rec.todo||null)!==extra.todo;
     const r=Object.assign({},recCtx.rec,{kind:k,count,note},extra,changedTodo?{todo_done:false}:{},{updated_at:new Date().toISOString()});
@@ -1181,6 +1201,7 @@ async function loadPlan(){
   applyPlan();
 }
 function applyPlan(){
+  if($('todoLock')) renderTodos();
   $('chatPaid').hidden=true; $('chatLock').hidden=paid(); $('sendRow').hidden=!paid();
   $('statsLock').hidden=paid(); $('statsBody').hidden=!paid();
   const cur=S.plan.pro?'pPersonal':(S.plan.team?'pTeam':'pFree');
@@ -1188,7 +1209,7 @@ function applyPlan(){
   $('buyPersonal').hidden=S.plan.pro; $('buyTeam').hidden=!S.group||S.plan.team||S.myRole!=='owner';
   for(const id of ['pFree','pPersonal','pTeam']){ const h=$(id).querySelector('h4'); let t=h.querySelector('.tag'); if(id===cur){ if(!t){ t=document.createElement('span'); t.className='tag'; t.textContent='利用中'; h.firstChild.after(t);} } else if(t) t.remove(); }
 }
-const PLAN_REASON={chat:'文字を打って送るチャットは、有料プランの機能です。定型文での連絡は無料で使えます。',stats:'メンバー別の集計とCSV出力は、有料プランの機能です。',groups:'無料プランで参加できるグループは1つまでです。'};
+const PLAN_REASON={chat:'文字を打って送るチャットは、有料プランの機能です。定型文での連絡は無料で使えます。',stats:'メンバー別の集計とCSV出力は、有料プランの機能です。',todo:'次の予定・TODOの管理は、有料プランの機能です。',groups:'無料プランで参加できるグループは1つまでです。'};
 function openPlan(reason){
   $('menuWrap').hidden=true; $('chatWrap').hidden=true;
   $('planReason').hidden=!PLAN_REASON[reason]; $('planReason').textContent=PLAN_REASON[reason]||'';
@@ -1229,6 +1250,7 @@ async function afterCheckout(){
 
 /* ---------- 予定・TODO ---------- */
 function renderTodos(){
+  $('todoLock').hidden=paid(); $('todoList').hidden=!paid(); if(!paid()) return;
   const mineOnly=$('todoMine').checked, today=todayStr();
   const list=[...S.records.values()].filter(r=>(r.next_date||r.todo)&&!r.todo_done&&(!mineOnly||r.user_id===S.user.id))
     .sort((a,b)=>(a.next_date||'9999').localeCompare(b.next_date||'9999'));
