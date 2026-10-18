@@ -352,6 +352,22 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 .recsheet .quick button{padding:6px 12px;font-size:13px}
 .chips button{border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700}
 .recbtns{margin-top:24px}
+
+/* --- compact record sheet: map stays visible --- */
+.recsheet{max-height:min(48vh,440px);padding-bottom:0}
+.recsheet .kmain{padding:10px 14px}
+.recsheet .kmain b{font-size:17px}
+.recsheet #countBox{margin-top:12px}
+.recsheet .stepper{grid-template-columns:52px 1fr 52px}
+.recsheet .stepper button,.recsheet .stepper input{height:46px}
+.recsheet .quick{margin-top:8px;flex-wrap:nowrap;overflow-x:auto}
+.recsheet .quick button{flex:none}
+.moreline{display:flex;align-items:center;gap:8px;width:100%;margin-top:16px;padding:10px 2px;border:0;border-top:1px dashed var(--line);background:none;color:var(--ink);text-align:left}
+.moreline span{font-weight:800;font-size:14px}
+.moreline small{flex:1;color:var(--muted);font-size:12px}
+.moreline b{font-size:18px;color:var(--muted);line-height:1}
+.more{margin-top:6px}
+.recbtns{position:sticky;bottom:0;background:var(--surface);margin:18px calc(-1*max(16px,env(safe-area-inset-left,0px))) 0;padding:10px max(16px,env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));border-top:1px solid var(--line);z-index:2}
 </style>
 </head>
 <body>
@@ -390,20 +406,23 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
       <div id="recNear" class="near" hidden></div>
       <div class="fs" id="kindArea">
         <button type="button" class="kmain" data-k="posted"><span class="kmain-ic" aria-hidden="true">📮</span><span><b>ポスト投函</b><small>不在・ポストに入れた</small></span></button>
-        <div class="ksub">
-          <button type="button" class="kchip" data-k="handed"><i style="background:#1f8a5b"></i>受け取った</button>
-          <button type="button" class="kchip" data-k="refuse"><i style="background:#c8372d"></i>お断り</button>
-          <button type="button" class="kchip" data-k="later"><i style="background:#e67700"></i>後日改めて</button>
+        <div class="fs" id="countBox">
+          <div class="stepper">
+            <button type="button" id="minusBtn" aria-label="1枚減らす">−</button>
+            <input id="countIn" type="number" inputmode="numeric" min="1" max="9999" value="1" aria-label="枚数">
+            <button type="button" id="plusBtn" aria-label="1枚増やす">＋</button>
+          </div>
+          <div class="quick" id="quickCounts"></div>
         </div>
-      </div>
-      <div class="fs" id="countBox">
-        <label class="fl" for="countIn">枚数<span>マンションは配った数</span></label>
-        <div class="stepper">
-          <button type="button" id="minusBtn" aria-label="1枚減らす">−</button>
-          <input id="countIn" type="number" inputmode="numeric" min="1" max="9999" value="1">
-          <button type="button" id="plusBtn" aria-label="1枚増やす">＋</button>
+        <button type="button" class="moreline" id="moreBtn"><span>詳しく入力</span><small>種類・配った相手・メモ</small><b aria-hidden="true">⌄</b></button>
+        <div class="more" id="moreArea">
+          <span class="fl">そのほかの種類</span>
+          <div class="ksub">
+            <button type="button" class="kchip" data-k="handed"><i style="background:#1f8a5b"></i>受け取った</button>
+            <button type="button" class="kchip" data-k="refuse"><i style="background:#c8372d"></i>お断り</button>
+            <button type="button" class="kchip" data-k="later"><i style="background:#e67700"></i>後日改めて</button>
+          </div>
         </div>
-        <div class="quick" id="quickCounts"></div>
       </div>
       <div class="fs" id="audBox">
         <span class="fl">配った相手<span>任意・いくつでも</span></span>
@@ -932,6 +951,7 @@ $('quickCounts').innerHTML=QUICK.map(n=>`<button data-n="${n}">${n}</button>`).j
 $('quickCounts').onclick=e=>{ const n=e.target.dataset.n; if(n){ $('countIn').value=n; buzz(15); } };
 $('minusBtn').onclick=()=>{ $('countIn').value=Math.max(1,(parseInt($('countIn').value)||1)-1); buzz(10); };
 $('plusBtn').onclick=()=>{ $('countIn').value=Math.min(9999,(parseInt($('countIn').value)||0)+1); buzz(10); };
+$('moreBtn').onclick=()=>{ const sh=document.querySelector('.recsheet'); sh.scrollTo({top:$('moreArea').offsetTop-60,behavior:'smooth'}); };
 $('kindArea').onclick=e=>{ const b=e.target.closest('[data-k]'); if(b){ setKind(b.dataset.k); buzz(10); } };
 function setKind(k){ for(const b of $('kindArea').querySelectorAll('[data-k]')){ const on=b.dataset.k===k; b.setAttribute('aria-pressed',on);
     if(b.classList.contains('kchip')){ b.style.background=on?KINDS[b.dataset.k].color:''; b.style.borderColor=on?KINDS[b.dataset.k].color:''; } }
@@ -966,10 +986,10 @@ function openRec(latlng,rec){
   setKind(recCtx.kind);
   if(!rec){ ghost=L.marker(latlng,{icon:L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],html:'<div class="pin ghost"></div>'}),interactive:false}).addTo(map); }
   showNear(recCtx.latlng);
-  $('recWrap').hidden=false;
+  $('recWrap').hidden=false; document.querySelector('.recsheet').scrollTop=0;
   // シートで隠れないように少し上へずらす
   const p=map.latLngToContainerPoint(recCtx.latlng), h=map.getSize().y;
-  if(p.y>h*0.45) map.panBy([0,p.y-h*0.3]);
+  if(p.y>h*0.42) map.panBy([0,p.y-h*0.28]);
 }
 function closeRec(){ $('recWrap').hidden=true; if(ghost){ map.removeLayer(ghost); ghost=null; } recCtx=null; }
 $('recCancel').onclick=closeRec;
