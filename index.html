@@ -354,7 +354,9 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 .recbtns{margin-top:24px}
 
 /* --- compact record sheet: map stays visible --- */
-.recsheet{max-height:min(48vh,440px);padding-bottom:0}
+.recsheet{max-height:min(48vh,440px);padding-bottom:0;transition:max-height .25s ease}
+.recsheet.expanded{max-height:88%}
+@media (prefers-reduced-motion:reduce){.recsheet{transition:none}}
 .recsheet .kmain{padding:10px 14px}
 .recsheet .kmain b{font-size:17px}
 .recsheet #countBox{margin-top:12px}
@@ -951,13 +953,15 @@ $('quickCounts').innerHTML=QUICK.map(n=>`<button data-n="${n}">${n}</button>`).j
 $('quickCounts').onclick=e=>{ const n=e.target.dataset.n; if(n){ $('countIn').value=n; buzz(15); } };
 $('minusBtn').onclick=()=>{ $('countIn').value=Math.max(1,(parseInt($('countIn').value)||1)-1); buzz(10); };
 $('plusBtn').onclick=()=>{ $('countIn').value=Math.min(9999,(parseInt($('countIn').value)||0)+1); buzz(10); };
-$('moreBtn').onclick=()=>{ const sh=document.querySelector('.recsheet'); sh.scrollTo({top:$('moreArea').offsetTop-60,behavior:'smooth'}); };
+function expandRec(){ const sh=document.querySelector('.recsheet'); if(sh.classList.contains('expanded')) return; sh.classList.add('expanded'); }
+$('moreBtn').onclick=()=>{ const sh=document.querySelector('.recsheet'); expandRec(); setTimeout(()=>sh.scrollTo({top:$('moreArea').offsetTop-70,behavior:'smooth'}),60); };
+document.querySelector('.recsheet').addEventListener('scroll',e=>{ if(e.target.scrollTop>40) expandRec(); },{passive:true});
 $('kindArea').onclick=e=>{ const b=e.target.closest('[data-k]'); if(b){ setKind(b.dataset.k); buzz(10); } };
 function setKind(k){ for(const b of $('kindArea').querySelectorAll('[data-k]')){ const on=b.dataset.k===k; b.setAttribute('aria-pressed',on);
     if(b.classList.contains('kchip')){ b.style.background=on?KINDS[b.dataset.k].color:''; b.style.borderColor=on?KINDS[b.dataset.k].color:''; } }
   $('countBox').hidden=!KINDS[k].sheets; $('audBox').hidden=k==='refuse'; recCtx.kind=k;
   $('laterHint').hidden=k!=='later'; }
-function setRecTab(t){ $('rtRec').setAttribute('aria-selected',t==='rec'); $('rtPlan').setAttribute('aria-selected',t==='plan'); $('recPane').hidden=t!=='rec'; $('planPane').hidden=t!=='plan';
+function setRecTab(t){ if(t==='plan') expandRec(); $('rtRec').setAttribute('aria-selected',t==='rec'); $('rtPlan').setAttribute('aria-selected',t==='plan'); $('recPane').hidden=t!=='rec'; $('planPane').hidden=t!=='plan';
   if(t==='plan'){ $('planLock').hidden=paid(); $('planForm').hidden=!paid(); } }
 $('rtRec').onclick=()=>setRecTab('rec'); $('rtPlan').onclick=()=>setRecTab('plan');
 function updatePlanDot(){ $('rtPlanDot').hidden=!($('nextDate').value||$('todoIn').value.trim()); }
@@ -986,7 +990,7 @@ function openRec(latlng,rec){
   setKind(recCtx.kind);
   if(!rec){ ghost=L.marker(latlng,{icon:L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,13],html:'<div class="pin ghost"></div>'}),interactive:false}).addTo(map); }
   showNear(recCtx.latlng);
-  $('recWrap').hidden=false; document.querySelector('.recsheet').scrollTop=0;
+  $('recWrap').hidden=false; document.querySelector('.recsheet').classList.remove('expanded'); document.querySelector('.recsheet').scrollTop=0;
   // シートで隠れないように少し上へずらす
   const p=map.latLngToContainerPoint(recCtx.latlng), h=map.getSize().y;
   if(p.y>h*0.42) map.panBy([0,p.y-h*0.28]);
