@@ -54,8 +54,14 @@ async function handle(req: Request): Promise<Response> {
 
   if (plan === "team") {
     if (!group_id) return json({ error: "グループを指定してください" }, 400);
-    const { data: m } = await admin.from("members").select("role").eq("group_id", group_id).eq("user_id", user.id).maybeSingle();
-    if (!m || m.role !== "owner") return json({ error: "チームプランにできるのは、グループの作成者だけです" }, 403);
+    // ログイン中のユーザー本人の権限で確認する（アクセス権の設定どおりに読める範囲だけを見る）
+    const asUser = createClient(Deno.env.get("SUPABASE_URL")!, req.headers.get("apikey") ?? Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const { data: m, error: mErr } = await asUser.from("members").select("role").eq("group_id", group_id).eq("user_id", user.id).maybeSingle();
+    if (mErr) return json({ error: "グループの確認に失敗しました：" + mErr.message }, 500);
+    if (!m) return json({ error: "このグループのメンバーではありません" }, 403);
+    if (m.role !== "owner") return json({ error: "チームプランにできるのは、グループの作成者だけです" }, 403);
     const { data: t } = await admin.rpc("is_team", { gid: group_id });
     if (t) return json({ error: "このグループはすでにチームプランです" }, 409);
   } else {
@@ -67,7 +73,8 @@ async function handle(req: Request): Promise<Response> {
   let { data: bc } = await admin.from("billing_customers").select("stripe_customer_id").eq("user_id", user.id).maybeSingle();
   if (!bc) {
     const customer = await stripe.customers.create({ email: user.email, metadata: { user_id: user.id } });
-    await admin.from("billing_customers").insert({ user_id: user.id, stripe_customer_id: customer.id });
+    const { error: bcErr } = await admin.from("billing_customers").insert({ user_id: user.id, stripe_customer_id: customer.id });
+    if (bcErr) return json({ error: "支払い情報の保存に失敗しました（サーバーの管理キーを確認）：" + bcErr.message }, 500);
     bc = { stripe_customer_id: customer.id };
   }
 
