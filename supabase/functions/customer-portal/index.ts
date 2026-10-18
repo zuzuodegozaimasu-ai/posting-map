@@ -3,21 +3,32 @@
 import Stripe from "npm:stripe@22.6.0";
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
-  httpClient: Stripe.createFetchHttpClient(),
-});
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const APP_URL = Deno.env.get("APP_URL") ?? "https://zuzuodegozaimasu-ai.github.io/posting-map/";
-const cors = {
-  "Access-Control-Allow-Origin": new URL(APP_URL).origin,
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+const cors = (req: Request) => ({
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": req.headers.get("Access-Control-Request-Headers") ?? "authorization, apikey, content-type, x-client-info",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+});
+let CORS: Record<string, string> = {};
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+  CORS = cors(req);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  try {
+    return await handle(req);
+  } catch (e) {
+    console.error(e);
+    return json({ error: "決済サーバーでエラーが起きました：" + (e instanceof Error ? e.message : String(e)) }, 500);
+  }
+});
+
+async function handle(req: Request): Promise<Response> {
+  const key = Deno.env.get("STRIPE_SECRET_KEY");
+  if (!key) return json({ error: "STRIPE_SECRET_KEY が Supabase の Secrets に登録されていません" }, 500);
+  const stripe = new Stripe(key, { httpClient: Stripe.createFetchHttpClient() });
   const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   const { data: auth, error } = await admin.auth.getUser(token);
   if (error || !auth.user) return json({ error: "ログインし直してください" }, 401);
@@ -27,4 +38,4 @@ Deno.serve(async (req) => {
 
   const portal = await stripe.billingPortal.sessions.create({ customer: bc.stripe_customer_id, return_url: APP_URL, locale: "ja" });
   return json({ url: portal.url });
-});
+}

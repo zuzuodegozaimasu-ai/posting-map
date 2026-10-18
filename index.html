@@ -968,10 +968,21 @@ async function callFn(name,body,btn){
   $('planErr').textContent=''; if(btn) btn.disabled=true;
   try{
     const {data,error}=await S.sb.functions.invoke(name,{body});
-    if(error){ let msg=error.message; try{ const j=await error.context.json(); if(j&&j.error) msg=j.error; }catch(x){} throw new Error(msg); }
+    if(error){
+      let msg='';
+      try{ const j=await error.context.json(); if(j&&j.error) msg=j.error; }catch(x){}
+      const st=error.context&&error.context.status;
+      if(!msg){
+        if(/FunctionsFetchError|Failed to send/i.test(error.name+error.message)) msg=`決済サーバー（${name}）に接続できません。Supabaseに「${name}」という名前で登録されているか、起動エラーが出ていないか確認してください。`;
+        else if(st===404) msg=`決済サーバー（${name}）が見つかりません。Supabaseでの登録名を確認してください。`;
+        else if(st===401) msg=`決済サーバー（${name}）の「Verify JWT」がオンのままです。オフにしてください。`;
+        else msg=`決済サーバー（${name}）でエラーが起きました（${st||error.message}）`;
+      }
+      throw new Error(msg);
+    }
     if(data&&data.url){ location.href=data.url; return; }
     throw new Error((data&&data.error)||'決済画面を開けませんでした');
-  }catch(e){ $('planErr').textContent=/Failed to send|FunctionsFetchError|404|not found/i.test(e.message)?'お支払いの準備がまだ整っていません。もう少しお待ちください。':jpErr(e); }
+  }catch(e){ $('planErr').textContent=jpErr(e); }
   finally{ if(btn) btn.disabled=false; }
 }
 $('buyPersonal').onclick=()=>callFn('create-checkout',{plan:'personal'},$('buyPersonal'));

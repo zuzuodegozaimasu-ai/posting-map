@@ -4,22 +4,20 @@
 import Stripe from "npm:stripe@22.6.0";
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, {
-  httpClient: Stripe.createFetchHttpClient(),
-});
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 const APP_URL = Deno.env.get("APP_URL") ?? "https://zuzuodegozaimasu-ai.github.io/posting-map/";
 const PRICES: Record<string, string | undefined> = {
   personal: Deno.env.get("STRIPE_PRICE_PERSONAL"),
   team: Deno.env.get("STRIPE_PRICE_TEAM"),
 };
-const cors = {
-  "Access-Control-Allow-Origin": new URL(APP_URL).origin,
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+const cors = (req: Request) => ({
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": req.headers.get("Access-Control-Request-Headers") ?? "authorization, apikey, content-type, x-client-info",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+});
+let CORS: Record<string, string> = {};
 const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
+  new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
 function randomLetters(n: number) {
   const a = "abcdefghijklmnopqrstuvwxyz";
@@ -27,7 +25,20 @@ function randomLetters(n: number) {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+  CORS = cors(req);
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  try {
+    return await handle(req);
+  } catch (e) {
+    console.error(e);
+    return json({ error: "決済サーバーでエラーが起きました：" + (e instanceof Error ? e.message : String(e)) }, 500);
+  }
+});
+
+async function handle(req: Request): Promise<Response> {
+  const key = Deno.env.get("STRIPE_SECRET_KEY");
+  if (!key) return json({ error: "STRIPE_SECRET_KEY が Supabase の Secrets に登録されていません" }, 500);
+  const stripe = new Stripe(key, { httpClient: Stripe.createFetchHttpClient() });
   if (req.method !== "POST") return json({ error: "POSTで呼び出してください" }, 405);
 
   // ログイン中のユーザーを確認
@@ -37,8 +48,9 @@ Deno.serve(async (req) => {
   const user = auth.user;
 
   const { plan, group_id } = await req.json().catch(() => ({}));
+  if (plan !== "personal" && plan !== "team") return json({ error: "プランの指定が正しくありません" }, 400);
   const price = PRICES[plan];
-  if (!price) return json({ error: "プランの指定が正しくありません" }, 400);
+  if (!price) return json({ error: `${plan === "team" ? "STRIPE_PRICE_TEAM" : "STRIPE_PRICE_PERSONAL"} が Supabase の Secrets に登録されていません` }, 500);
 
   if (plan === "team") {
     if (!group_id) return json({ error: "グループを指定してください" }, 400);
@@ -73,4 +85,4 @@ Deno.serve(async (req) => {
     integration_identifier: `posting-map-${plan}-${randomLetters(8)}`,
   });
   return json({ url: session.url });
-});
+}
