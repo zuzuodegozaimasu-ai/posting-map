@@ -323,6 +323,35 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
   .lp-price{grid-template-columns:repeat(3,1fr)}
   .lp-steps{grid-template-columns:repeat(3,1fr)}
 }
+
+/* --- record sheet layout --- */
+.recsheet{padding-top:18px}
+.recsheet .fs{margin-top:20px}
+.recsheet #recNear{margin:14px 0 0}
+.rechead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.rechead h2{margin:0}
+.modesw{display:inline-flex;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px;flex:none}
+.modesw button{border:0;background:transparent;border-radius:999px;padding:6px 16px;font-weight:800;font-size:13px;color:var(--muted)}
+.modesw button[aria-selected=true]{background:var(--ink);color:var(--surface)}
+.fl{display:flex;align-items:baseline;gap:8px;font-size:13px;font-weight:800;color:var(--ink);margin:0 0 8px}
+.fl span{font-weight:500;color:var(--muted);font-size:12px}
+.kmain{display:flex;align-items:center;gap:14px;width:100%;text-align:left;border:2px solid var(--line);background:var(--surface);border-radius:18px;padding:14px 16px;color:var(--ink)}
+.kmain-ic{font-size:26px;line-height:1}
+.kmain b{display:block;font-size:18px}
+.kmain small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.kmain[aria-pressed=true]{background:#1f6fd1;border-color:#1f6fd1;color:#fff}
+.kmain[aria-pressed=true] small{color:rgba(255,255,255,.85)}
+.ksub{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.kchip{display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;border:1px solid var(--line);background:transparent;border-radius:12px;padding:9px 6px;font-size:12px;font-weight:700;color:var(--ink);line-height:1.3;text-align:center}
+.kchip i{flex:none;width:8px;height:8px;border-radius:50%}
+.kchip[aria-pressed=true]{color:#fff}
+.kchip[aria-pressed=true] i{background:#fff!important}
+.recsheet .stepper{grid-template-columns:56px 1fr 56px}
+.recsheet .stepper button,.recsheet .stepper input{height:52px}
+.recsheet .quick{margin-top:10px}
+.recsheet .quick button{padding:6px 12px;font-size:13px}
+.chips button{border-radius:8px;padding:6px 11px;font-size:12px;font-weight:700}
+.recbtns{margin-top:24px}
 </style>
 </head>
 <body>
@@ -348,44 +377,62 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 
 <!-- ===== record sheet ===== -->
 <div id="recWrap" class="sheet-wrap clear" hidden>
-  <div class="sheet" role="dialog" aria-modal="false" aria-labelledby="recTitle">
-    <h2 id="recTitle">この家を記録</h2>
-    <div class="tabs rectabs" role="tablist">
-      <button role="tab" type="button" id="rtRec" aria-selected="true">記録</button>
-      <button role="tab" type="button" id="rtPlan" aria-selected="false">予定<span id="rtPlanDot" class="rtdot" hidden></span></button>
-    </div>
-    <div id="recPane">
-    <div id="recNear" class="near" hidden></div>
-    <div class="seg4" id="kindSeg"></div>
-    <div id="countBox">
-      <label for="countIn">枚数（マンションは配った数）</label>
-      <div class="stepper">
-        <button id="minusBtn" aria-label="1枚減らす">−</button>
-        <input id="countIn" type="number" inputmode="numeric" min="1" max="9999" value="1">
-        <button id="plusBtn" aria-label="1枚増やす">＋</button>
+  <div class="sheet recsheet" role="dialog" aria-modal="false" aria-labelledby="recTitle">
+    <div class="rechead">
+      <h2 id="recTitle">この家を記録</h2>
+      <div class="modesw" role="tablist" aria-label="入力の切り替え">
+        <button role="tab" type="button" id="rtRec" aria-selected="true">記録</button>
+        <button role="tab" type="button" id="rtPlan" aria-selected="false">予定<span id="rtPlanDot" class="rtdot" hidden></span></button>
       </div>
-      <div class="quick" id="quickCounts"></div>
     </div>
-    <div id="audBox">
-      <label>配った相手（任意・いくつでも）</label>
-      <div class="chips" id="audChips"></div>
+
+    <div id="recPane">
+      <div id="recNear" class="near" hidden></div>
+      <div class="fs" id="kindArea">
+        <button type="button" class="kmain" data-k="posted"><span class="kmain-ic" aria-hidden="true">📮</span><span><b>ポスト投函</b><small>不在・ポストに入れた</small></span></button>
+        <div class="ksub">
+          <button type="button" class="kchip" data-k="handed"><i style="background:#1f8a5b"></i>受け取った</button>
+          <button type="button" class="kchip" data-k="refuse"><i style="background:#c8372d"></i>お断り</button>
+          <button type="button" class="kchip" data-k="later"><i style="background:#e67700"></i>後日改めて</button>
+        </div>
+      </div>
+      <div class="fs" id="countBox">
+        <label class="fl" for="countIn">枚数<span>マンションは配った数</span></label>
+        <div class="stepper">
+          <button type="button" id="minusBtn" aria-label="1枚減らす">−</button>
+          <input id="countIn" type="number" inputmode="numeric" min="1" max="9999" value="1">
+          <button type="button" id="plusBtn" aria-label="1枚増やす">＋</button>
+        </div>
+        <div class="quick" id="quickCounts"></div>
+      </div>
+      <div class="fs" id="audBox">
+        <span class="fl">配った相手<span>任意・いくつでも</span></span>
+        <div class="chips" id="audChips"></div>
+      </div>
+      <div class="fs">
+        <label class="fl" for="noteIn">メモ<span>任意</span></label>
+        <input id="noteIn" type="text" maxlength="100" placeholder="例：〇〇マンション前／ポストが裏側">
+      </div>
+      <p class="note fs" id="laterHint" hidden>右上の「予定」で、次に行く日とやることを入れられます。</p>
     </div>
-    <label for="noteIn">メモ（任意）</label>
-    <input id="noteIn" type="text" maxlength="100" placeholder="例：〇〇マンション前／ポストが裏側">
-    <p class="note" id="laterHint" hidden>「予定」タブで、次に行く日とやることを入れられます。</p>
-    </div>
+
     <div id="planPane" hidden>
       <div id="planLock" class="lock" hidden>次の予定・TODOの管理は、<b>有料プラン</b>の機能です。<br><button type="button" class="btn primary" data-openplan="todo">プランを見る</button></div>
       <div id="planForm">
-        <label for="nextDate">次に行く日</label>
-        <input id="nextDate" type="date">
-        <label for="todoIn">やること</label>
-        <input id="todoIn" type="text" maxlength="200" placeholder="例：〇〇のポスターを貼ってもらう約束">
-        <div class="quick" id="dateQuick"><button type="button" data-d="1">明日</button><button type="button" data-d="3">3日後</button><button type="button" data-d="7">1週間後</button><button type="button" data-d="0">日付を消す</button></div>
-        <p class="note">予定はグループのメンバーにも見えます。☰ →「予定」タブに日付順で並びます。</p>
+        <div class="fs">
+          <label class="fl" for="nextDate">次に行く日</label>
+          <input id="nextDate" type="date">
+          <div class="quick" id="dateQuick"><button type="button" data-d="1">明日</button><button type="button" data-d="3">3日後</button><button type="button" data-d="7">1週間後</button><button type="button" data-d="0">消す</button></div>
+        </div>
+        <div class="fs">
+          <label class="fl" for="todoIn">やること</label>
+          <input id="todoIn" type="text" maxlength="200" placeholder="例：〇〇のポスターを貼ってもらう約束">
+        </div>
+        <p class="note fs">予定はグループのメンバーにも見えます。☰ →「予定」に日付順で並びます。</p>
       </div>
     </div>
-    <div class="row">
+
+    <div class="row recbtns">
       <button id="recDelete" class="btn danger" hidden>削除</button>
       <button id="recCancel" class="btn">やめる</button>
       <button id="recSave" class="btn primary wide">保存</button>
@@ -885,9 +932,9 @@ $('quickCounts').innerHTML=QUICK.map(n=>`<button data-n="${n}">${n}</button>`).j
 $('quickCounts').onclick=e=>{ const n=e.target.dataset.n; if(n){ $('countIn').value=n; buzz(15); } };
 $('minusBtn').onclick=()=>{ $('countIn').value=Math.max(1,(parseInt($('countIn').value)||1)-1); buzz(10); };
 $('plusBtn').onclick=()=>{ $('countIn').value=Math.min(9999,(parseInt($('countIn').value)||0)+1); buzz(10); };
-$('kindSeg').innerHTML=KIND_ORDER.map(k=>`<button type="button" data-k="${k}">${KINDS[k].label}<small>${KINDS[k].short}</small></button>`).join('');
-$('kindSeg').onclick=e=>{ const b=e.target.closest('[data-k]'); if(b) setKind(b.dataset.k); };
-function setKind(k){ for(const b of $('kindSeg').children){ const on=b.dataset.k===k; b.setAttribute('aria-pressed',on); b.style.background=on?KINDS[b.dataset.k].color:''; b.style.borderColor=on?KINDS[b.dataset.k].color:''; }
+$('kindArea').onclick=e=>{ const b=e.target.closest('[data-k]'); if(b){ setKind(b.dataset.k); buzz(10); } };
+function setKind(k){ for(const b of $('kindArea').querySelectorAll('[data-k]')){ const on=b.dataset.k===k; b.setAttribute('aria-pressed',on);
+    if(b.classList.contains('kchip')){ b.style.background=on?KINDS[b.dataset.k].color:''; b.style.borderColor=on?KINDS[b.dataset.k].color:''; } }
   $('countBox').hidden=!KINDS[k].sheets; $('audBox').hidden=k==='refuse'; recCtx.kind=k;
   $('laterHint').hidden=k!=='later'; }
 function setRecTab(t){ $('rtRec').setAttribute('aria-selected',t==='rec'); $('rtPlan').setAttribute('aria-selected',t==='plan'); $('recPane').hidden=t!=='rec'; $('planPane').hidden=t!=='plan';
