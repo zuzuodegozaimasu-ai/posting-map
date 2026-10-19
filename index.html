@@ -1013,7 +1013,10 @@ function onPosErr(e){ if(e.code===1) toast('位置情報が許可されていま
 function startGps(){ if('geolocation' in navigator) navigator.geolocation.watchPosition(onPos,onPosErr,{enableHighAccuracy:true,maximumAge:5000,timeout:30000}); }
 let wakeLock=null;
 async function keepAwake(){ try{ if('wakeLock' in navigator && document.visibilityState==='visible') wakeLock=await navigator.wakeLock.request('screen'); }catch(e){} }
-document.addEventListener('visibilitychange',()=>{ keepAwake(); if(document.visibilityState==='visible'){ trackMe(true); flush(); } });
+document.addEventListener('visibilitychange',()=>{ keepAwake(); if(document.visibilityState==='visible'){ trackMe(true); flush(); } else hideMe(); });
+window.addEventListener('pagehide',hideMe);
+// アプリを閉じたり別の画面に切り替えたら、すぐに自分の位置をメンバーの地図から消す
+function hideMe(){ if(S.pchan&&S.pReady){ try{ S.pchan.untrack(); }catch(e){} } }
 
 /* ---------- record sheet ---------- */
 let recCtx=null, ghost=null;
