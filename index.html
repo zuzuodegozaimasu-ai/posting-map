@@ -1009,11 +1009,23 @@ function onPos(p){
   else if(S.follow && $('recWrap').hidden) map.panTo([S.pos.lat,S.pos.lng]);
   trackMe(false);
 }
-function onPosErr(e){ if(e.code===1) toast('位置情報が許可されていません。地図での記録はできますが、現在地は表示されません。',{kind:'warn',ms:7000}); }
-function startGps(){ if('geolocation' in navigator) navigator.geolocation.watchPosition(onPos,onPosErr,{enableHighAccuracy:true,maximumAge:5000,timeout:30000}); }
+let gpsId=null, gpsWarned=false;
+const IN_APP=/Line\/|FBAN|FBAV|Instagram/i.test(navigator.userAgent);
+function onPosErr(e){
+  if(e.code===1){ toast(IN_APP?'位置情報が使えません。右上の「…」から「ブラウザで開く」（SafariかChrome）で開き直すと使えるようになります。':'位置情報が許可されていません。スマホの設定で、このブラウザの位置情報を「許可」にしてください。地図での記録はそのままできます。',{kind:'warn',ms:9000}); return; }
+  if(!gpsWarned && !S.pos){ gpsWarned=true; toast('現在地を取得できません。スマホの位置情報（GPS）がオンか、空の見える場所にいるか確認してください。',{kind:'warn',ms:7000}); }
+}
+function startGps(){
+  if(!('geolocation' in navigator)) return;
+  if(gpsId!==null) navigator.geolocation.clearWatch(gpsId);
+  gpsId=navigator.geolocation.watchPosition(onPos,onPosErr,{enableHighAccuracy:true,maximumAge:5000,timeout:30000});
+}
 let wakeLock=null;
 async function keepAwake(){ try{ if('wakeLock' in navigator && document.visibilityState==='visible') wakeLock=await navigator.wakeLock.request('screen'); }catch(e){} }
-document.addEventListener('visibilitychange',()=>{ keepAwake(); if(document.visibilityState==='visible'){ trackMe(true); flush(); } else hideMe(); });
+document.addEventListener('visibilitychange',()=>{ keepAwake(); if(document.visibilityState==='visible'){ if(S.user&&(!S.pos||Date.now()-S.pos.ts>60000)) startGps(); ensureLive(); trackMe(true); flush(); } else hideMe(); });
+window.addEventListener('online',()=>{ ensureLive(); trackMe(true); });
+// じっとしていても「オンライン」のままになるよう、45秒ごとに知らせる。つながっていなければつなぎ直す
+setInterval(()=>{ if(document.visibilityState!=='visible') return; if(!S.pReady) ensureLive(); else trackMe(true); },45000);
 window.addEventListener('pagehide',hideMe);
 // アプリを閉じたり別の画面に切り替えたら、すぐに自分の位置をメンバーの地図から消す
 function hideMe(){ if(S.pchan&&S.pReady){ try{ S.pchan.untrack(); }catch(e){} } }
@@ -1646,7 +1658,8 @@ async function joinByCode(code){
 
 async function leaveGroup(){
   if(S.chan){ try{ await S.sb.removeChannel(S.chan); }catch(e){} S.chan=null; }
-  if(S.pchan){ try{ await S.pchan.untrack(); await S.sb.removeChannel(S.pchan); }catch(e){} S.pchan=null; }
+  clearTimeout(S.pRetry);
+  if(S.pchan){ const ch=S.pchan; S.pchan=null; try{ await ch.untrack(); await S.sb.removeChannel(ch); }catch(e){} }
   S.pReady=false; S.peers.clear(); bubbles.clear(); clearMap(); S.records.clear(); S.messages=[];
 }
 async function enterGroup(g){
@@ -1686,11 +1699,27 @@ async function enterGroup0(g){
     .on('postgres_changes',{event:'DELETE',schema:'public',table:'areas'},p=>{ const id=p.old&&p.old.id; if(id&&S.areas.has(id)){ S.areas.delete(id); undrawArea(id); } })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'group_id=eq.'+gid},async p=>{ await ensureName(p.new.user_id); addMsg(p.new,p.new.user_id===S.user.id); })
     .subscribe();
-  S.pchan=S.sb.channel('live-'+gid,{config:{presence:{key:S.user.id}}})
-    .on('presence',{event:'sync'},syncPeers)
-    .subscribe(st=>{ if(st==='SUBSCRIBED'){ S.pReady=true; trackMe(true); updateChip(); } else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED'){ S.pReady=false; updateChip(); } });
+  joinPresence(gid);
   setTimeout(maybeTour,900);
 }
+// 位置の共有用の接続。切れたら自動でつなぎ直す
+function joinPresence(gid){
+  clearTimeout(S.pRetry);
+  if(S.pchan){ const old=S.pchan; S.pchan=null; try{ S.sb.removeChannel(old); }catch(e){} }
+  S.pReady=false; updateChip();
+  const ch=S.sb.channel('live-'+gid,{config:{presence:{key:S.user.id}}});
+  S.pchan=ch;
+  ch.on('presence',{event:'sync'},()=>{ if(ch===S.pchan) syncPeers(); })
+    .subscribe(st=>{
+      if(ch!==S.pchan) return; // 古い接続からの知らせは無視
+      if(st==='SUBSCRIBED'){ S.pReady=true; S.pFail=0; trackMe(true); updateChip(); }
+      else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED'){
+        S.pReady=false; updateChip(); S.pFail=(S.pFail||0)+1;
+        clearTimeout(S.pRetry); S.pRetry=setTimeout(()=>{ if(S.group&&S.group.id===gid&&!S.pReady&&ch===S.pchan) joinPresence(gid); },Math.min(30000,3000*S.pFail));
+      }
+    });
+}
+function ensureLive(){ if(S.group&&S.user&&!S.pReady&&document.visibilityState==='visible') joinPresence(S.group.id); }
 async function ensureName(id){ if(S.names.has(id)) return; const {data}=await S.sb.from('profiles').select('id,display_name,avatar,color').eq('id',id).maybeSingle(); if(data) setProfile(data); }
 async function onRec(r){
   if(!r||S.pending.includes(r.id)) return;
