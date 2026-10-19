@@ -43,6 +43,33 @@ button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--warn);outline-offset:2px}
 .pad-x{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 
+
+/* tutorial */
+.tour{position:fixed;inset:0;z-index:3000}
+.tour-hole{position:fixed;border-radius:16px;box-shadow:0 0 0 9999px rgba(6,18,15,.72);transition:all .3s ease;pointer-events:none}
+.tour-hole.none{left:50%!important;top:40%!important;width:0!important;height:0!important}
+.tour-hole:not(.none)::after{content:"";position:absolute;inset:-5px;border-radius:20px;border:2px solid #7be0ae;animation:tpulse 1.6s ease-out infinite}
+@keyframes tpulse{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.18)}}
+.tour-card{position:fixed;left:50%;transform:translateX(-50%);width:min(360px,calc(100vw - 32px));background:var(--surface);color:var(--ink);border-radius:20px;padding:16px 16px 14px;box-shadow:0 10px 40px rgba(0,0,0,.35);transition:top .3s ease}
+.tour-card h2{margin:4px 0 6px;font-size:18px}
+.tour-top{display:flex;align-items:center;justify-content:space-between}
+.tour-step{font-size:12px;font-weight:800;color:var(--done)}
+.tour-skip{background:none;border:0;color:var(--muted);font-size:13px;padding:4px}
+.tour-body{font-size:14px;line-height:1.7}
+.tour-body p{margin:0 0 8px}
+.tour-dots{display:flex;gap:5px;justify-content:center;margin:10px 0 2px}
+.tour-dots i{width:6px;height:6px;border-radius:9px;background:var(--line);transition:all .2s}
+.tour-dots i.on{width:18px;background:var(--done)}
+.tmock{border:1px solid var(--line);border-radius:14px;padding:10px;margin:6px 0 8px;background:var(--bg)}
+.tmock .tm-main{background:var(--chat);color:#fff;border-radius:10px;padding:9px;font-weight:800;text-align:center}
+.tmock .tm-row{display:flex;gap:6px;margin-top:7px;align-items:center;font-size:12px;font-weight:700}
+.tmock .tm-row span{border:1px solid var(--line);border-radius:999px;padding:3px 9px;background:var(--surface)}
+.tmock .tm-row b{margin-left:auto;font-size:15px}
+.tlegend{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin:6px 0 8px;font-size:13px;font-weight:700}
+.tlegend span{display:flex;align-items:center;gap:6px}
+.tlegend i{width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.2);flex:none}
+.ticon{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:10px;background:var(--bg);border:1px solid var(--line);vertical-align:middle;margin-right:4px}
+.ticon svg{width:18px;height:18px}
 /* top bar */
 .top{background:var(--brand);color:#fff;display:flex;align-items:center;gap:8px;z-index:1000;
   padding:calc(env(safe-area-inset-top,0px) + 8px) max(12px,env(safe-area-inset-right,0px)) 8px max(12px,env(safe-area-inset-left,0px))}
@@ -54,8 +81,10 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(-
 
 #map{flex:1;min-height:0;background:#dfe5e1}
 .fab{position:absolute;right:max(12px,env(safe-area-inset-right,0px));z-index:900;display:flex;flex-direction:column;gap:8px}
-.fab button{width:54px;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);font-size:12px;font-weight:700}
-.fab button.on{background:var(--brand);color:#fff}
+.fab button{width:48px;height:48px;border-radius:16px;border:1px solid var(--line);background:var(--surface);color:var(--ink);box-shadow:var(--shadow);display:grid;place-items:center;padding:0;transition:background .15s,color .15s,transform .1s}
+.fab button:active{transform:scale(.94)}
+.fab button.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+.fab button svg{display:block}
 .hint{position:absolute;left:50%;transform:translateX(-50%);z-index:900;background:var(--surface);color:var(--ink);border:1px solid var(--line);
   box-shadow:var(--shadow);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;white-space:nowrap;pointer-events:none}
 
@@ -385,14 +414,26 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 <div id="hint" class="hint">記録したい家をタップ</div>
 <div id="toasts" aria-live="polite"></div>
 <div class="fab" id="fab">
-  <button id="locBtn" class="on" aria-label="現在地を追う">現在地</button>
-  <button id="layerBtn" aria-label="地図の種類を切り替え">写真</button>
-  <button id="areaBtn" aria-label="配布範囲を描く">範囲</button>
+  <button id="locBtn" class="on" aria-label="現在地を追う" title="現在地"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+  <button id="layerBtn" aria-label="航空写真に切り替え" title="地図／写真"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg></button>
+  <button id="areaBtn" aria-label="配布範囲を描く" title="範囲"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 5 18 4l2 9-6 7-10-4z" stroke-dasharray="3.2 2.6"/><circle cx="6" cy="5" r="1.6" fill="currentColor"/><circle cx="20" cy="13" r="1.6" fill="currentColor"/><circle cx="4" cy="16" r="1.6" fill="currentColor"/></svg></button>
 </div>
 <nav class="bar">
   <div class="today" id="today">今日の配布<br><b>0</b> 枚</div>
   <button id="chatBtn" class="chatbtn">チャット・連絡<span id="chatPaid" class="paidtag" hidden>有料</span><span id="badge" class="badge" hidden>0</span></button>
 </nav>
+
+<!-- ===== tutorial ===== -->
+<div id="tour" class="tour" hidden>
+  <div class="tour-hole" id="tourHole"></div>
+  <div class="tour-card" id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+    <div class="tour-top"><span id="tourStep" class="tour-step"></span><button id="tourSkip" class="tour-skip">スキップ</button></div>
+    <h2 id="tourTitle"></h2>
+    <div id="tourBody" class="tour-body"></div>
+    <div class="tour-dots" id="tourDots"></div>
+    <div class="row"><button id="tourPrev" class="btn">戻る</button><button id="tourNext" class="btn primary wide">次へ</button></div>
+  </div>
+</div>
 
 <!-- ===== record sheet ===== -->
 <div id="recWrap" class="sheet-wrap clear" hidden>
@@ -562,6 +603,7 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
       <div class="toggle"><span>自分の現在地をメンバーに表示する</span><input id="shareLocIn" type="checkbox" checked></div>
       <p class="note">オフにすると、地図上のあなたのアイコンが他のメンバーから見えなくなります。アプリを閉じている間は、オンでも位置は送られません。</p>
       <div class="row"><button class="btn primary wide" data-openplan="me">プランと支払い</button></div>
+      <div class="row"><button id="tourBtn" class="btn wide">使い方を見る</button></div>
       <p class="note">ログイン中：<b id="meName"></b>（<span id="meEmail"></span>）</p>
       <div class="row">
         <button id="leaveBtn" class="btn danger">このグループを抜ける</button>
@@ -874,7 +916,7 @@ const layers={
   photo:L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg',{maxNativeZoom:18,maxZoom:21,attribution:gsiAttr})
 };
 let layerName='std'; layers.std.addTo(map);
-$('layerBtn').onclick=()=>{ map.removeLayer(layers[layerName]); layerName=layerName==='std'?'photo':'std'; layers[layerName].addTo(map); $('layerBtn').textContent=layerName==='std'?'写真':'地図'; };
+$('layerBtn').onclick=()=>{ map.removeLayer(layers[layerName]); layerName=layerName==='std'?'photo':'std'; layers[layerName].addTo(map); $('layerBtn').classList.toggle('on',layerName==='photo'); $('layerBtn').setAttribute('aria-label',layerName==='std'?'航空写真に切り替え':'普通の地図に切り替え'); };
 const meDot=L.marker([0,0],{icon:L.divIcon({className:'',html:''}),zIndexOffset:1500,interactive:false});
 function meIcon(){ return L.divIcon({className:'',iconSize:[60,48],iconAnchor:[30,16],html:`<div class="peer me-dot"><div class="dot" style="background:${S.user?personColor(S.user.id):'#1f6fd1'}">${S.user?personMark(S.user.id,S.myName):''}</div><div class="nm">あなた</div></div>`}); }
 const meAcc=L.circle([0,0],{radius:10,color:'#1f6fd1',weight:1,fillOpacity:.1,interactive:false});
@@ -1605,6 +1647,7 @@ async function enterGroup(g){
   S.pchan=S.sb.channel('live-'+gid,{config:{presence:{key:S.user.id}}})
     .on('presence',{event:'sync'},syncPeers)
     .subscribe(st=>{ if(st==='SUBSCRIBED'){ S.pReady=true; trackMe(true); updateChip(); } else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED'){ S.pReady=false; updateChip(); } });
+  setTimeout(maybeTour,900);
 }
 async function ensureName(id){ if(S.names.has(id)) return; const {data}=await S.sb.from('profiles').select('id,display_name,avatar,color').eq('id',id).maybeSingle(); if(data) setProfile(data); }
 async function onRec(r){
@@ -1614,6 +1657,50 @@ async function onRec(r){
   S.records.set(r.id,r); drawRec(r); renderStats();
   if(isNew && r.user_id!==S.user.id){ buzz(25); toast(`${nameOf(r.user_id)}さんが「${KINDS[kindOf(r)].label}」${KINDS[kindOf(r)].sheets?r.count+'枚':''}を記録`); }
 }
+
+
+/* ---------- 使い方ガイド ---------- */
+const svgOf=id=>{ const b=$(id); return b?b.innerHTML:''; };
+const TOUR=[
+  {t:'配布マップへようこそ',b:()=>`<p>チームで「どこに配ったか」を地図で共有して、二重配りを防ぐアプリです。</p><p>1分で使い方を紹介します。</p>`},
+  {el:'#hint',pad:10,t:'① 配った家をタップ',b:()=>`<p>地図で家をタップすると、下に記録の画面が出ます。</p>
+    <div class="tmock"><div class="tm-main">📮 ポスト投函</div><div class="tm-row"><span>1枚</span><span>2枚</span><span>5枚</span><b>− 1 ＋</b></div></div>
+    <p>基本は「ポスト投函」と枚数を選んで保存するだけ。マンションは枚数を増やせます。</p>`},
+  {el:'#hint',pad:10,t:'② ほかの種類は「詳しく入力」',b:()=>`<p>「詳しく入力」を押すと、種類・配った相手・メモを入れられます。もう一度押すと元に戻ります。</p>
+    <div class="tlegend">${KIND_ORDER.map(k=>`<span><i style="background:${KINDS[k].color}"></i>${k==='handed'?'手渡し':KINDS[k].label}</span>`).join('')}</div>
+    <p>記録した家は、この色のピンで全員の地図にすぐ出ます。</p>`},
+  {el:'#locBtn',t:'③ 現在地',b:()=>`<p><span class="ticon">${svgOf('locBtn')}</span>自分の場所に地図を戻します。あなたの位置はプロフィールのアイコンで表示され、仲間の位置も見えます。</p>`},
+  {el:'#layerBtn',t:'④ 地図と航空写真',b:()=>`<p><span class="ticon">${svgOf('layerBtn')}</span>航空写真に切り替えると、家の形が分かりやすくなります。もう一度押すと普通の地図に戻ります。</p>`},
+  {el:'#areaBtn',t:'⑤ 配る範囲を決める',b:()=>`<p><span class="ticon">${svgOf('areaBtn')}</span>押してから、指で地図をなぞって範囲を囲みます。範囲ごとに色が分かれ、配った枚数も自動で集計されます。</p>`},
+  {el:'#chatBtn',pad:4,t:'⑥ チャット・連絡',b:()=>`<p>「こっちに来てください」などの定型文で、すぐ仲間を呼べます。メッセージは送った人の位置に吹き出しで出ます。</p>`},
+  {el:'#today',pad:4,t:'⑦ 今日の配布枚数',b:()=>`<p>今日あなたが配った枚数です。範囲ごと・メンバーごとの集計はメニューで見られます。</p>`},
+  {el:'#menuBtn',pad:4,t:'⑧ メニュー',b:()=>`<p>仲間の招待（LINEで送れます）、集計、予定、プロフィールの変更はここから。</p><p>この使い方も、メニューの「プロフィール」→「使い方を見る」でいつでも見られます。</p>`},
+  {t:'練習してみましょう',b:()=>`<p>地図のどこかをタップして、記録の画面を開いてみてください。</p><p>「やめる」を押せば記録は残らないので、安心して試せます。</p>`,next:'やってみる'}
+];
+let tourI=0;
+function maybeTour(){ if(store.get('pm_tourDone',false)||!$('tour').hidden||!$('groupScreen').hidden||!S.group) return; if(!$('menuWrap').hidden||!$('recWrap').hidden||!$('planWrap').hidden){ setTimeout(maybeTour,800); return; } startTour(); }
+function startTour(){ tourI=0; $('tour').hidden=false; showTour(); }
+function endTour(){ $('tour').hidden=true; store.set('pm_tourDone',true); }
+function showTour(){
+  const st=TOUR[tourI], hole=$('tourHole'), card=$('tourCard');
+  $('tourStep').textContent=`${tourI+1} / ${TOUR.length}`;
+  $('tourTitle').textContent=st.t; $('tourBody').innerHTML=st.b();
+  $('tourDots').innerHTML=TOUR.map((_,i)=>`<i class="${i===tourI?'on':''}"></i>`).join('');
+  $('tourPrev').hidden=tourI===0; $('tourNext').textContent=st.next||(tourI===TOUR.length-1?'はじめる':'次へ');
+  const el=st.el&&document.querySelector(st.el); const r=el&&el.offsetParent!==null?el.getBoundingClientRect():null;
+  const vh=window.innerHeight;
+  if(r&&r.width){ const p=st.pad??6; hole.classList.remove('none');
+    Object.assign(hole.style,{left:(r.left-p)+'px',top:(r.top-p)+'px',width:(r.width+p*2)+'px',height:(r.height+p*2)+'px'});
+    const ch=card.offsetHeight||300; const below=r.bottom+18, above=r.top-18-ch;
+    card.style.top=(r.top+r.height/2<vh/2 ? Math.min(below,vh-ch-12) : Math.max(12,above))+'px';
+  } else { hole.classList.add('none'); hole.removeAttribute('style'); card.style.top=Math.max(12,(vh-(card.offsetHeight||300))/2)+'px'; }
+  requestAnimationFrame(()=>{ if(!r){ card.style.top=Math.max(12,(vh-card.offsetHeight)/2)+'px'; } else { const ch=card.offsetHeight; card.style.top=(r.top+r.height/2<vh/2 ? Math.min(r.bottom+18,vh-ch-12) : Math.max(12,r.top-18-ch))+'px'; } });
+}
+$('tourNext').onclick=()=>{ if(tourI>=TOUR.length-1){ endTour(); return; } tourI++; showTour(); };
+$('tourPrev').onclick=()=>{ if(tourI>0){ tourI--; showTour(); } };
+$('tourSkip').onclick=endTour;
+$('tourBtn').onclick=()=>{ $('menuWrap').hidden=true; setTimeout(startTour,150); };
+window.addEventListener('resize',()=>{ if(!$('tour').hidden) showTour(); });
 
 /* ---------- boot ---------- */
 async function afterLogin(user){
