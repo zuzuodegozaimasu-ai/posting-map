@@ -910,6 +910,10 @@ function buzz(p){ try{ navigator.vibrate && navigator.vibrate(p); }catch(e){} }
 function jpErr(e){
   const m=(e&&e.message)||String(e);
   if(/free_limit:/.test(m)) return m.replace(/^.*free_limit:/,'');
+  if(/Error sending (confirmation|recovery|magic link|invite)?.*email|sending.*email/i.test(m)) return /recovery/i.test(m)?'再設定のメールを送れませんでした。時間をおいてもう一度試すか、管理者にお問い合わせください。':'確認メールを送れませんでした。時間をおいてもう一度試すか、管理者にお問い合わせください。';
+  if(/Signups not allowed/i.test(m)) return '現在、新しいアカウントの作成を受け付けていません。';
+  if(/weak.*password|password.*(should contain|too weak)/i.test(m)) return 'パスワードが簡単すぎます。英字と数字を混ぜるなど、もっと複雑にしてください。';
+  if(/Database error saving new user/i.test(m)) return 'アカウントを保存できませんでした。時間をおいてもう一度試してください。';
   if(/Invalid login credentials/i.test(m)) return 'メールアドレスかパスワードが違います。';
   if(/already registered|already been registered/i.test(m)) return 'このメールアドレスは登録済みです。「ログイン」から入ってください。';
   if(/at least 6/i.test(m)) return 'パスワードは6文字以上にしてください。';
