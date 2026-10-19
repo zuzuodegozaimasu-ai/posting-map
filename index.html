@@ -1480,7 +1480,15 @@ $('leaveBtn').onclick=async()=>{
   else toast('グループを抜けました');
 };
 $('logoutBtn').onclick=logout; $('gLogout').onclick=logout;
-async function logout(){ await leaveGroup(); await S.sb.auth.signOut(); store.del('pm_lastGroup'); location.reload(); }
+async function logout(){
+  loading('ログアウトしています…');
+  const within=(p,ms)=>Promise.race([Promise.resolve(p).catch(()=>{}),new Promise(r=>setTimeout(r,ms))]);
+  await within(leaveGroup(),2500); // 通信が悪くても止まらないように
+  await within(S.sb.auth.signOut({scope:'local'}),2500);
+  try{ for(const k of Object.keys(localStorage)) if(/^sb-.*-auth-token/.test(k)) localStorage.removeItem(k); }catch(e){}
+  store.del('pm_lastGroup');
+  location.replace(location.pathname);
+}
 function closeAllSheets(){ if(!$('recWrap').hidden) closeRec(); if(!$('areaWrap').hidden){ $('areaWrap').hidden=true; clearDraft(); } $('chatWrap').hidden=true; $('menuWrap').hidden=true; }
 
 /* ---------- profile ---------- */
