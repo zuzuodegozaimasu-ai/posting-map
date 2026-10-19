@@ -44,6 +44,18 @@ button:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(-
 .pad-x{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 
 
+/* loading */
+.loader{position:fixed;inset:0;z-index:3500;display:grid;place-items:center;background:rgba(6,18,15,.62);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);animation:lfade .2s ease .25s both}
+@keyframes lfade{from{opacity:0}to{opacity:1}}
+.loader-card{background:#14322b;color:#fff;border-radius:22px;padding:22px 22px 18px;width:min(300px,calc(100vw - 48px));text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+.loader-pin{display:grid;place-items:center;margin-bottom:6px}
+.loader-arc{transform-origin:24px 24px;animation:lspin 1s linear infinite}
+@keyframes lspin{to{transform:rotate(360deg)}}
+.loader-msg{margin:4px 0 0;font-weight:800;font-size:15px}
+.loader-sub{margin:6px 0 0;font-size:12.5px;line-height:1.6;color:#b9d3c8}
+.loader-sub:empty{display:none}
+.loader-close{margin-top:12px;background:rgba(255,255,255,.12);color:#fff;border:0;border-radius:10px;padding:8px 18px;font-weight:700}
+@media (prefers-reduced-motion:reduce){.loader-arc{animation-duration:3s}}
 /* tutorial */
 .tour{position:fixed;inset:0;z-index:3000}
 .tour-hole{position:fixed;border-radius:16px;box-shadow:0 0 0 9999px rgba(6,18,15,.72);transition:all .3s ease;pointer-events:none}
@@ -422,6 +434,16 @@ td,th{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
   <div class="today" id="today">今日の配布<br><b>0</b> 枚</div>
   <button id="chatBtn" class="chatbtn">チャット・連絡<span id="chatPaid" class="paidtag" hidden>有料</span><span id="badge" class="badge" hidden>0</span></button>
 </nav>
+
+<!-- ===== loading ===== -->
+<div id="loader" class="loader" hidden role="status" aria-live="polite">
+  <div class="loader-card">
+    <div class="loader-pin" aria-hidden="true"><svg viewBox="0 0 48 48" width="56" height="56"><circle cx="24" cy="24" r="20" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="4"/><circle class="loader-arc" cx="24" cy="24" r="20" fill="none" stroke="#5fd39c" stroke-width="4" stroke-linecap="round" stroke-dasharray="40 100"/><path d="M24 13c-4.6 0-8 3.4-8 7.8 0 5.6 8 13.2 8 13.2s8-7.6 8-13.2c0-4.4-3.4-7.8-8-7.8z" fill="#5fd39c"/><path d="m20.6 20.8 2.4 2.4 4.4-4.6" fill="none" stroke="#0b1d18" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <p id="loadMsg" class="loader-msg">読み込み中…</p>
+    <p id="loadSub" class="loader-sub"></p>
+    <button id="loadClose" class="loader-close" hidden>閉じる</button>
+  </div>
+</div>
 
 <!-- ===== tutorial ===== -->
 <div id="tour" class="tour" hidden>
@@ -1336,6 +1358,7 @@ $('planClose').onclick=()=>{ $('planWrap').hidden=true; };
 $('planWrap').onclick=e=>{ if(e.target===$('planWrap')) $('planWrap').hidden=true; };
 async function callFn(name,body,btn){
   $('planErr').textContent=''; if(btn) btn.disabled=true;
+  let going=false; loading(name==='customer-portal'?'契約の画面を準備しています…':'お支払い画面を準備しています…');
   try{
     const {data,error}=await S.sb.functions.invoke(name,{body});
     if(error){
@@ -1350,10 +1373,10 @@ async function callFn(name,body,btn){
       }
       throw new Error(msg);
     }
-    if(data&&data.url){ location.href=data.url; return; }
+    if(data&&data.url){ going=true; $('loadMsg').textContent=name==='customer-portal'?'契約の画面に移動しています…':'お支払い画面（Stripe）に移動しています…'; location.href=data.url; setTimeout(()=>loaded(true),15000); return; }
     throw new Error((data&&data.error)||'決済画面を開けませんでした');
   }catch(e){ $('planErr').textContent=jpErr(e); }
-  finally{ if(btn) btn.disabled=false; }
+  finally{ if(btn) btn.disabled=false; if(!going) loaded(); }
 }
 $('buyPersonal').onclick=()=>callFn('create-checkout',{plan:'personal'},$('buyPersonal'));
 $('buyTeam').onclick=()=>callFn('create-checkout',{plan:'team',group_id:S.group&&S.group.id},$('buyTeam'));
@@ -1507,16 +1530,16 @@ $('authForm').addEventListener('submit',async e=>{
   const email=$('aEmail').value.trim(), pass=$('aPass').value, name=$('aName').value.trim();
   if(authMode==='forgot'){
     if(!email){ err.textContent='メールアドレスを入れてください。'; return; }
-    $('authSubmit').disabled=true;
+    $('authSubmit').disabled=true; loading('メールを送っています…');
     const {error}=await S.sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
-    $('authSubmit').disabled=false;
+    $('authSubmit').disabled=false; loaded();
     if(error){ err.textContent=jpErr(error); return; }
     err.style.color='var(--done)'; err.textContent='再設定のメールを送りました。メールのリンクを開くと、新しいパスワードを設定できます。届かない場合は、迷惑メールフォルダも確認してください。';
     return;
   }
   if(authMode==='signup' && !name){ err.textContent='表示名を入れてください。'; return; }
   if(!email||!pass){ err.textContent='メールアドレスとパスワードを入れてください。'; return; }
-  $('authSubmit').disabled=true;
+  $('authSubmit').disabled=true; loading(authMode==='signup'?'アカウントを作成しています…':'ログインしています…');
   try{
     if(authMode==='signup'){
       const {data,error}=await S.sb.auth.signUp({email,password:pass,options:{data:{display_name:name},emailRedirectTo:location.origin+location.pathname}});
@@ -1526,7 +1549,7 @@ $('authForm').addEventListener('submit',async e=>{
       const {error}=await S.sb.auth.signInWithPassword({email,password:pass}); if(error) throw error;
     }
   }catch(ex){ err.style.color=''; err.textContent=jpErr(ex); }
-  finally{ $('authSubmit').disabled=false; }
+  finally{ $('authSubmit').disabled=false; loaded(); }
 });
 
 $('resetForm').addEventListener('submit',async e=>{
@@ -1534,9 +1557,9 @@ $('resetForm').addEventListener('submit',async e=>{
   const a=$('rPass').value, b=$('rPass2').value;
   if(a.length<6){ err.textContent='パスワードは6文字以上にしてください。'; return; }
   if(a!==b){ err.textContent='2つのパスワードが一致しません。'; return; }
-  $('resetSubmit').disabled=true;
+  $('resetSubmit').disabled=true; loading('パスワードを変更しています…');
   const {data,error}=await S.sb.auth.updateUser({password:a});
-  $('resetSubmit').disabled=false;
+  $('resetSubmit').disabled=false; loaded();
   if(error){ err.textContent=jpErr(error); return; }
   $('resetWrap').hidden=true; S.recovering=false; toast('新しいパスワードを保存しました');
   if(!S.booted){ S.booted=true; afterLogin(data.user); }
@@ -1575,7 +1598,7 @@ $('grpBtn').onclick=async()=>{ closeAllSheets(); try{ await loadGroups(); await 
 $('gBack').onclick=()=>{ $('groupScreen').hidden=true; };
 $('createBtn').onclick=async()=>{
   const n=$('newGrp').value.trim(); if(!n){ $('gErr').textContent='グループ名を入れてください。'; return; }
-  $('createBtn').disabled=true; $('gErr').textContent='作成中…';
+  $('createBtn').disabled=true; $('gErr').textContent=''; loading('グループを作成しています…');
   try{
     const {data,error}=await S.sb.rpc('create_group',{p_name:n});
     if(error) throw error;
@@ -1584,16 +1607,16 @@ $('createBtn').onclick=async()=>{
     try{ await loadGroups(); }catch(e){ throw new Error('グループ一覧を読み込めません：'+jpErr(e)); }
     if(!g||!g.id) g=S.groups[S.groups.length-1];
     if(!g) throw new Error('グループは作成されましたが、一覧に表示できません（アクセス権の設定を確認してください）');
-    $('gErr').textContent='';
+    $('gErr').textContent=''; $('loadMsg').textContent='地図を準備しています…';
     await enterGroup(g);
     setTimeout(()=>openMenu('invite'),600);
   }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); if(/free_limit/.test(e.message||'')){ $('gPlan').hidden=false; openPlan('groups'); } }
-  finally{ $('createBtn').disabled=false; }
+  finally{ $('createBtn').disabled=false; loaded(); }
 };
 $('joinBtn').onclick=()=>joinByCode($('joinCode').value);
 async function joinByCode(code){
   code=(code||'').trim(); if(!code){ $('gErr').textContent='招待コードを入れてください。'; return; }
-  store.del('pm_join');
+  store.del('pm_join'); loading('グループに参加しています…');
   try{
     const {data,error}=await S.sb.rpc('join_group',{p_code:code});
     if(error) throw error;
@@ -1603,6 +1626,7 @@ async function joinByCode(code){
     if(!g) throw new Error('参加しましたが、グループを読み込めませんでした');
     await enterGroup(g); toast(`「${g.name}」に参加しました`);
   }catch(e){ showGroups(); $('gErr').textContent='エラー：'+jpErr(e); if(/free_limit/.test(e.message||'')){ $('gPlan').hidden=false; openPlan('groups'); } }
+  finally{ loaded(); }
 }
 
 async function leaveGroup(){
@@ -1612,6 +1636,9 @@ async function leaveGroup(){
 }
 async function enterGroup(g){
   if(!g) return;
+  loading(loadN?$('loadMsg').textContent:'地図を読み込んでいます…'); try{ await enterGroup0(g); } finally{ loaded(); }
+}
+async function enterGroup0(g){
   await leaveGroup();
   S.group=g; store.set('pm_lastGroup',g.id);
   $('grpName').textContent=g.name; $('groupScreen').hidden=true; $('authScreen').hidden=true;
@@ -1659,6 +1686,18 @@ async function onRec(r){
 }
 
 
+/* ---------- 読み込み中の表示 ---------- */
+let loadN=0, loadT1=null, loadT2=null;
+function loading(msg){
+  loadN++; $('loadMsg').textContent=msg||'読み込み中…'; $('loadSub').textContent=''; $('loadClose').hidden=true; $('loader').hidden=false;
+  clearTimeout(loadT1); clearTimeout(loadT2);
+  loadT1=setTimeout(()=>{ $('loadSub').textContent='通信に時間がかかっています。電波の良い場所で、そのままお待ちください。'; },7000);
+  loadT2=setTimeout(()=>{ $('loadClose').hidden=false; },20000);
+}
+function loaded(all){ loadN=all?0:Math.max(0,loadN-1); if(!loadN){ $('loader').hidden=true; clearTimeout(loadT1); clearTimeout(loadT2); } }
+$('loadClose').onclick=()=>loaded(true);
+window.addEventListener('pageshow',e=>{ if(e.persisted) loaded(true); }); // 決済画面から「戻る」で戻ったとき
+
 /* ---------- 使い方ガイド ---------- */
 const svgOf=id=>{ const b=$(id); return b?b.innerHTML:''; };
 const TOUR=[
@@ -1704,6 +1743,9 @@ window.addEventListener('resize',()=>{ if(!$('tour').hidden) showTour(); });
 
 /* ---------- boot ---------- */
 async function afterLogin(user){
+  loading('読み込み中…'); try{ await afterLogin0(user); } finally{ loaded(); }
+}
+async function afterLogin0(user){
   S.user=user;
   const {data}=await S.sb.from('profiles').select('id,display_name,avatar,color').eq('id',user.id).maybeSingle();
   S.myName=(data&&data.display_name)||(user.user_metadata&&user.user_metadata.display_name)||(user.email||'').split('@')[0];
@@ -1716,7 +1758,7 @@ async function afterLogin(user){
   if(join){ await joinByCode(join); return; }
   try{ await loadGroups(); }catch(e){ toast('グループを読み込めません：'+jpErr(e),{kind:'warn',ms:8000}); }
   const last=store.get('pm_lastGroup',null), g=S.groups.find(x=>x.id===last);
-  if(g) enterGroup(g); else if(S.groups.length===1) enterGroup(S.groups[0]); else showGroups();
+  if(g) await enterGroup(g); else if(S.groups.length===1) await enterGroup(S.groups[0]); else showGroups();
 }
 function layout(){
   const top=document.querySelector('.top').offsetHeight, bar=document.querySelector('.bar').offsetHeight;
