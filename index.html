@@ -1832,6 +1832,7 @@ window.addEventListener('unhandledrejection',e=>{
 (async function init(){
   const q=new URLSearchParams(location.search);
   if(q.get('join')){ store.set('pm_join',q.get('join')); history.replaceState(null,'',location.pathname); }
+  const authQ=['login','signup'].includes(q.get('auth'))?q.get('auth'):null; if(authQ) history.replaceState(null,'',location.pathname);
   const checkout=q.get('checkout'); if(checkout){ store.set('pm_checkout',checkout); history.replaceState(null,'',location.pathname); }
   if(!/^https:\/\//.test(SUPABASE_URL) || SUPABASE_ANON_KEY.length<20 || !window.supabase){ $('cfgScreen').hidden=false; return; }
   const hash=new URLSearchParams(location.hash.slice(1));
@@ -1848,6 +1849,7 @@ window.addEventListener('unhandledrejection',e=>{
   if(location.hash) history.replaceState(null,'',location.pathname+location.search);
   if(!data.session){
     showAuth();
+    if(authQ&&$('authWrap').hidden) openAuth(authQ);
     if(linkErr){ openAuth('forgot'); $('authErr').textContent=/expired/i.test(hash.get('error_code')||'')?'リンクの有効期限が切れています。もう一度、再設定メールを送ってください。':'リンクを開けませんでした：'+(hash.get('error_description')||linkErr); }
   }
 })();
